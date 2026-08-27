@@ -543,6 +543,7 @@ zero-wage-spike case lives and it is worth a test.
 Create `tests/test_viewer_histogram.cpp`:
 
 ```cpp
+#include <stdexcept>
 #include <vector>
 
 #include "doctest.h"
