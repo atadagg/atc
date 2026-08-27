@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "doctest.h"
@@ -104,4 +105,31 @@ TEST_CASE("different seeds produce different runs") {
         return w.firms[0].price;
     };
     CHECK(price_of_firm_zero(1) != price_of_firm_zero(2));
+}
+
+TEST_CASE("post-burn-in behaviour does not depend on the initial network") {
+    // Two runs differing ONLY in the initial random network (different seeds
+    // for construction, same seed for the dynamics) should reach statistically
+    // similar unemployment after burn-in. This is a weak but real check that
+    // initial conditions wash out.
+    auto mean_unemployment_after_burn_in = [](uint64_t init_seed) {
+        Rng init_rng(init_seed);
+        World w(params::kNumHouseholds, params::kNumFirms, init_rng);
+        Rng dyn_rng(4242);
+        Scheduler s(w, dyn_rng);
+        for (int i = 0; i < 300; ++i) s.run_month();
+
+        double total = 0.0;
+        for (int i = 0; i < 100; ++i) {
+            s.run_month();
+            uint32_t unemployed = 0;
+            for (const auto& h : w.households) if (!h.employed()) ++unemployed;
+            total += static_cast<double>(unemployed) / w.households.size();
+        }
+        return total / 100.0;
+    };
+
+    double a = mean_unemployment_after_burn_in(11);
+    double b = mean_unemployment_after_burn_in(999);
+    CHECK(std::abs(a - b) < 0.15);
 }

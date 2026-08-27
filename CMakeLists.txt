@@ -41,3 +41,6 @@ add_executable(economy_tests
 target_link_libraries(economy_tests PRIVATE economy_core)
 target_include_directories(economy_tests PRIVATE third_party)
 add_test(NAME economy_tests COMMAND economy_tests)
+
+add_executable(economy src/main.cpp)
+target_link_libraries(economy PRIVATE economy_core)
