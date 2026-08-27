@@ -131,5 +131,10 @@ TEST_CASE("post-burn-in behaviour does not depend on the initial network") {
 
     double a = mean_unemployment_after_burn_in(11);
     double b = mean_unemployment_after_burn_in(999);
-    CHECK(std::abs(a - b) < 0.15);
+    // Tightened from 0.15 (15pp): the observed unemployment range across a
+    // 6000-month run is only ~0-2.8pp, so a 15pp tolerance could never be
+    // violated by any real initial-condition dependence. 0.01 (1pp) is still
+    // comfortably above the ~0.05pp gap actually observed, but is now within
+    // the variable's real range, so a genuine dependence would trip it.
+    CHECK(std::abs(a - b) < 0.01);
 }
