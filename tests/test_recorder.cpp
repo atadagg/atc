@@ -63,7 +63,7 @@ TEST_CASE("csv recorder writes a header and one row per record") {
         CsvRecorder rec(path);
         Metrics m{};
         m.month = 1; m.unemployment_rate = 0.5; m.mean_price = 2.0;
-        m.mean_wage = 20.0; m.total_production = 30.0; m.vacancies = 2;
+        m.mean_wage = 20.0; m.daily_capacity = 30.0; m.vacancies = 2;
         m.gini = 0.25; m.total_money = 1000.0;
         rec.record(m);
         m.month = 2;
@@ -95,7 +95,7 @@ TEST_CASE("field round-trip serialization with distinct values") {
         m.unemployment_rate = 0.123456789;
         m.mean_price = 1.987654321;
         m.mean_wage = 25.5;
-        m.total_production = 123.456;
+        m.daily_capacity = 123.456;
         m.vacancies = 7;
         m.gini = 0.333333333;
         m.total_money = 5000.111;
@@ -110,22 +110,22 @@ TEST_CASE("field round-trip serialization with distinct values") {
     std::string line;
     REQUIRE(std::getline(in, line));
 
-    // Parse CSV: month,unemployment_rate,mean_price,mean_wage,total_production,vacancies,gini,total_money
+    // Parse CSV: month,unemployment_rate,mean_price,mean_wage,daily_capacity,vacancies,gini,total_money
     std::stringstream ss(line);
     int month;
-    double unemployment_rate, mean_price, mean_wage, total_production, gini, total_money;
+    double unemployment_rate, mean_price, mean_wage, daily_capacity, gini, total_money;
     int vacancies;
     char comma;
 
     ss >> month >> comma >> unemployment_rate >> comma >> mean_price >> comma
-       >> mean_wage >> comma >> total_production >> comma >> vacancies >> comma
+       >> mean_wage >> comma >> daily_capacity >> comma >> vacancies >> comma
        >> gini >> comma >> total_money;
 
     CHECK(month == 42);
     CHECK(unemployment_rate == doctest::Approx(0.123456789).epsilon(1e-10));
     CHECK(mean_price == doctest::Approx(1.987654321).epsilon(1e-10));
     CHECK(mean_wage == doctest::Approx(25.5).epsilon(1e-10));
-    CHECK(total_production == doctest::Approx(123.456).epsilon(1e-10));
+    CHECK(daily_capacity == doctest::Approx(123.456).epsilon(1e-10));
     CHECK(vacancies == 7);
     CHECK(gini == doctest::Approx(0.333333333).epsilon(1e-10));
     CHECK(total_money == doctest::Approx(5000.111).epsilon(1e-10));
@@ -143,7 +143,7 @@ TEST_CASE("precision retention for high-precision values") {
         m.unemployment_rate = 0.1;
         m.mean_price = 1.0;
         m.mean_wage = 30.0;
-        m.total_production = 100.0;
+        m.daily_capacity = 100.0;
         m.vacancies = 0;
         m.gini = 0.5;
         m.total_money = 123456.789012345;  // Value where truncation error is unmistakable
@@ -161,12 +161,12 @@ TEST_CASE("precision retention for high-precision values") {
     // Parse the total_money field (last field)
     std::stringstream ss(line);
     int month;
-    double unemployment_rate, mean_price, mean_wage, total_production, gini, total_money;
+    double unemployment_rate, mean_price, mean_wage, daily_capacity, gini, total_money;
     int vacancies;
     char comma;
 
     ss >> month >> comma >> unemployment_rate >> comma >> mean_price >> comma
-       >> mean_wage >> comma >> total_production >> comma >> vacancies >> comma
+       >> mean_wage >> comma >> daily_capacity >> comma >> vacancies >> comma
        >> gini >> comma >> total_money;
 
     // Assert on absolute difference: at 6 significant digits, 123456.789012345 becomes 123457 (error ~0.211)

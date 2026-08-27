@@ -4,6 +4,12 @@
 
 namespace params {
 
+// =====================================================================
+// Published calibration (Lengnick 2013 Table 1, plus the paper's stated
+// population/network setup) — do not tune. These values come from the
+// published paper and must match it exactly.
+// =====================================================================
+
 // --- Time ---
 inline constexpr int kDaysPerMonth = 21;
 
@@ -37,14 +43,21 @@ inline constexpr double kBufferFactor = 0.1;            // chi
 // --- Shopping ---
 inline constexpr double kDemandSatisfiedFraction = 0.95;
 
-// --- Initial conditions ---
+// =====================================================================
+// Everything above this line is published calibration (Lengnick 2013
+// Table 1) — do not tune. Everything below is initial conditions and run
+// configuration: not specified by the paper, chosen for this
+// implementation, and safe to adjust without touching the model itself.
+// =====================================================================
+
+// --- Initial conditions (not specified by the paper) ---
 inline constexpr double kInitialFirmLiquidity = 0.0;
 inline constexpr double kInitialHouseholdLiquidity = 100.0;
 inline constexpr double kInitialPrice = 1.0;
 inline constexpr double kInitialWage = 30.0;
 inline constexpr double kInitialInventory = 0.0;
 
-// --- Run configuration ---
+// --- Run configuration (not specified by the paper) ---
 inline constexpr int kBurnInMonths = 1000;
 inline constexpr int kMeasurementMonths = 6000;
 

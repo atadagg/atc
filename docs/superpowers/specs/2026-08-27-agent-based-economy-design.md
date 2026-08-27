@@ -234,6 +234,17 @@ primary source of coordination failure.
 
 1. Pay wages: firm liquidity falls by `wage × employees`; each employee's
    liquidity rises by `wage`.
+   - **Unaffordable wage bill.** If `wage × employees` exceeds the firm's
+     liquidity, the firm does not go bankrupt. Instead — Lengnick 2013
+     §2.4 — `wage` is permanently cut to `liquidity / employees` (the most
+     the firm can pay), and the bill is recomputed at that reduced wage
+     before liquidity is debited. This is a real behavioural rule, not a
+     bookkeeping clamp: the cut `wage` value persists into next month, so it
+     also feeds `firm_decisions::marginal_cost` (and hence next month's
+     price-band floor/cap), next month's `adjust_wage` raise/cut decision,
+     and any employee's reservation wage via
+     `month_close::update_reservation_wages`. It is what keeps the firm
+     count constant with no entry or exit.
 2. Retain a buffer proportional to the wage bill: `buffer = χ · wage ×
    employees`.
 3. Distribute all remaining liquidity to households as profit, **in

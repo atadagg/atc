@@ -19,7 +19,13 @@ Metrics compute_metrics(const World& w, int month) {
     }
     m.unemployment_rate =
         static_cast<double>(unemployed) / static_cast<double>(w.households.size());
-    m.total_production = params::kProductivity * static_cast<double>(employed);
+    // Rate, not a monthly total: kProductivity is a per-day-per-worker
+    // yield, so this is employed workers' capacity for a single day, not
+    // the month's output. It is also measured after month_close::run --
+    // specifically after apply_pending_fires -- so `employed` here already
+    // reflects next month's headcount, not the headcount that produced
+    // whatever inventory exists at this recording point.
+    m.daily_capacity = params::kProductivity * static_cast<double>(employed);
 
     double price_sum = 0.0;
     double wage_sum = 0.0;
@@ -56,11 +62,11 @@ CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
     }
     out_ << std::setprecision(15);
     out_ << "month,unemployment_rate,mean_price,mean_wage,"
-            "total_production,vacancies,gini,total_money\n";
+            "daily_capacity,vacancies,gini,total_money\n";
 }
 
 void CsvRecorder::record(const Metrics& m) {
     out_ << m.month << ',' << m.unemployment_rate << ',' << m.mean_price << ','
-         << m.mean_wage << ',' << m.total_production << ',' << m.vacancies << ','
+         << m.mean_wage << ',' << m.daily_capacity << ',' << m.vacancies << ','
          << m.gini << ',' << m.total_money << '\n';
 }

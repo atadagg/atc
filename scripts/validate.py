@@ -45,7 +45,7 @@ def main():
                 "unemployment_rate": float(row["unemployment_rate"]),
                 "mean_price": float(row["mean_price"]),
                 "mean_wage": float(row["mean_wage"]),
-                "total_production": float(row["total_production"]),
+                "daily_capacity": float(row["daily_capacity"]),
                 "vacancies": float(row["vacancies"]),
                 "gini": float(row["gini"]),
                 "total_money": float(row["total_money"]),
