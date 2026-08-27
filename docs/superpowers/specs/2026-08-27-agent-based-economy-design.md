@@ -353,3 +353,58 @@ order; each attaches at a named module.
   — credit, bankruptcy cascades, firm-size power laws
 - Coase, R. (1937). *The Nature of the Firm.* — coordination cost, firm boundaries
 - Romer, P. (1990). *Endogenous Technological Change.* — non-rivalry, increasing returns
+
+---
+
+## 11. v1 results (2026-08-27)
+
+Measured with `./build/economy --seed 1 --burn-in 1000 --months 6000 --out
+output/run.csv` (1000 households, 100 firms, unmodified Table 1 calibration,
+no exogenous shocks) and `scripts/validate.py` (Python stdlib only —
+matplotlib/pandas are unavailable in this environment; `scripts/plot.py` is
+kept as written but unexecuted). Runtime: ~9.1s for the full 7000-month run.
+Money conservation: drift `-1.0e-9`, spread over the whole run
+`2.0e-9` — the master invariant holds throughout.
+
+Determinism and burn-in independence both hold: identical seeds byte-for-byte
+reproduce a run, and the `Rng`-seeded network-independence test (300-month
+warm-up, differing only in the initial random network) gives mean
+unemployment of 1.00% vs. 0.95% for two different network seeds under the
+same dynamics seed — well within the test's 15-point tolerance, though both
+values are consistent with the same near-zero equilibrium described below.
+
+| # | Criterion | Measured | Verdict |
+|---|---|---|---|
+| 1 | Endogenous unemployment fluctuation | mean 0.86%, sd 0.45pp, range [0.0%, 2.8%]; lag-1 autocorrelation 0.92 decaying to ~0 by lag 12 (mean-reverting noise, not a boom/bust cycle) | **FAIL (in substance)** |
+| 2 | Phillips curve (unemployment vs. wage inflation) | correlation −0.103 | PASS (weak) |
+| 3 | Beveridge curve (unemployment vs. vacancies) | correlation −0.237 | PASS |
+| 4 | Wealth dispersion (Gini of household liquidity) | mean 0.025, range [0.011, 0.054] across the run, first-decile mean 0.031 vs. last-decile mean 0.021 | PASS |
+
+**Criterion 1 in detail.** Unemployment is *not* pinned at literal zero — it
+moves, sd > 0 is technically satisfied, and only 0.5% of post-burn-in months
+show exactly 0%. But the entire post-burn-in run stays confined to a
+0.0–2.8% band around a 0.86% mean, with autocorrelation that decays to noise
+within about a year — i.e. small mean-reverting fluctuation, not the
+multi-percent boom/bust cycling (Lengnick reports unemployment ranging
+roughly 0–20% with a mean around 5%) the criterion is meant to detect.
+Vacancies stay chronically high (mean ~55 of 100 firms unfilled) at the same
+time, which is the tell: an unemployed household's job search (`β=5` random
+firm visits against a ~55% vacancy rate) finds and accepts an open position
+almost every month it's out of work, so unemployment cannot accumulate long
+enough to swing. Every rule inspected — `firm_decisions::adjust_workforce`,
+`household_decisions::search_job`, `network::hire`/`fire`,
+`month_close::apply_pending_fires` — matches the spec's §5 text and the
+plan's calibration table verbatim; the "Known ambiguity" household-φ note
+was already followed correctly (no such parameter exists in the code). No
+implementation bug was found in the diagnosis order the plan specifies. This
+is reported as a genuine finding, not patched: the mismatch between this
+run's near-full-employment equilibrium and Lengnick's published cyclical
+unemployment is most likely either a subtler calibration/behavioral gap
+still to be located, or a feature of Lengnick's model not fully captured by
+this reading of the paper — not something to fix by adjusting Table 1
+constants.
+
+Criteria 2–4 pass on their stated numeric thresholds, though 2 and 3 are
+correlated with (and plausibly weakened by) criterion 1's muted amplitude:
+a Phillips/Beveridge relationship measured over a 0–2.8% unemployment range
+is a much weaker test than one measured over 0–20%.
