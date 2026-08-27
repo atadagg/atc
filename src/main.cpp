@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <print>
 #include <stdexcept>
 #include <string>
@@ -15,10 +16,15 @@
 
 namespace {
 
-long parse_long(std::string_view s, long fallback) {
-    long value = fallback;
+// Parses the whole of `s` as a base-10 integer. Returns nullopt (rather than
+// silently falling back to a default) if any of it fails to parse -- for a
+// reproducibility tool, a malformed --seed must never silently become a
+// different, unintended run.
+std::optional<long> parse_long(std::string_view s) {
+    long value = 0;
     auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
-    return (ec == std::errc{}) ? value : fallback;
+    if (ec != std::errc{} || ptr != s.data() + s.size()) return std::nullopt;
+    return value;
 }
 
 }  // namespace
@@ -29,13 +35,41 @@ int main(int argc, char** argv) {
     int burn_in = params::kBurnInMonths;
     std::string out_path = "output/run.csv";
 
-    for (int i = 1; i + 1 < argc; i += 2) {
+    for (int i = 1; i < argc; i += 2) {
         std::string_view flag(argv[i]);
+        if (i + 1 >= argc) {
+            std::println(stderr, "error: flag '{}' is missing a value", flag);
+            return 1;
+        }
         std::string_view value(argv[i + 1]);
-        if (flag == "--seed")         seed = static_cast<uint64_t>(parse_long(value, 1));
-        else if (flag == "--months")  months = static_cast<int>(parse_long(value, months));
-        else if (flag == "--burn-in") burn_in = static_cast<int>(parse_long(value, burn_in));
-        else if (flag == "--out")     out_path = std::string(value);
+
+        if (flag == "--seed") {
+            auto v = parse_long(value);
+            if (!v) {
+                std::println(stderr, "error: --seed expects an integer, got '{}'", value);
+                return 1;
+            }
+            seed = static_cast<uint64_t>(*v);
+        } else if (flag == "--months") {
+            auto v = parse_long(value);
+            if (!v) {
+                std::println(stderr, "error: --months expects an integer, got '{}'", value);
+                return 1;
+            }
+            months = static_cast<int>(*v);
+        } else if (flag == "--burn-in") {
+            auto v = parse_long(value);
+            if (!v) {
+                std::println(stderr, "error: --burn-in expects an integer, got '{}'", value);
+                return 1;
+            }
+            burn_in = static_cast<int>(*v);
+        } else if (flag == "--out") {
+            out_path = std::string(value);
+        } else {
+            std::println(stderr, "error: unrecognized flag '{}'", flag);
+            return 1;
+        }
     }
 
     std::println("seed={} burn_in={} months={} out={}", seed, burn_in, months, out_path);
