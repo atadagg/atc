@@ -1,6 +1,8 @@
 #include "recorder.hpp"
 
 #include <algorithm>
+#include <iomanip>
+#include <stdexcept>
 #include <vector>
 
 #include "params.hpp"
@@ -49,6 +51,10 @@ Metrics compute_metrics(const World& w, int month) {
 }
 
 CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
+    if (!out_.is_open()) {
+        throw std::runtime_error("CsvRecorder: cannot open output file: " + path);
+    }
+    out_ << std::setprecision(15);
     out_ << "month,unemployment_rate,mean_price,mean_wage,"
             "total_production,vacancies,gini,total_money\n";
 }

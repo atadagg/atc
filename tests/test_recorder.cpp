@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <stdexcept>
 
 TEST_CASE("unemployment rate counts unemployed households") {
     Rng rng(1);
@@ -81,4 +82,99 @@ TEST_CASE("csv recorder writes a header and one row per record") {
     CHECK(rows == 2);
 
     std::remove(path.c_str());
+}
+
+TEST_CASE("field round-trip serialization with distinct values") {
+    const std::string path = "test_roundtrip.csv";
+    std::remove(path.c_str());
+    {
+        CsvRecorder rec(path);
+        Metrics m{};
+        m.month = 42;
+        m.unemployment_rate = 0.123456789;
+        m.mean_price = 1.987654321;
+        m.mean_wage = 25.5;
+        m.total_production = 123.456;
+        m.vacancies = 7;
+        m.gini = 0.333333333;
+        m.total_money = 5000.111;
+        rec.record(m);
+    }
+
+    std::ifstream in(path);
+    REQUIRE(in.good());
+    std::string header;
+    std::getline(in, header);
+
+    std::string line;
+    REQUIRE(std::getline(in, line));
+
+    // Parse CSV: month,unemployment_rate,mean_price,mean_wage,total_production,vacancies,gini,total_money
+    std::stringstream ss(line);
+    int month;
+    double unemployment_rate, mean_price, mean_wage, total_production, gini, total_money;
+    int vacancies;
+    char comma;
+
+    ss >> month >> comma >> unemployment_rate >> comma >> mean_price >> comma
+       >> mean_wage >> comma >> total_production >> comma >> vacancies >> comma
+       >> gini >> comma >> total_money;
+
+    CHECK(month == 42);
+    CHECK(unemployment_rate == doctest::Approx(0.123456789).epsilon(1e-10));
+    CHECK(mean_price == doctest::Approx(1.987654321).epsilon(1e-10));
+    CHECK(mean_wage == doctest::Approx(25.5).epsilon(1e-10));
+    CHECK(total_production == doctest::Approx(123.456).epsilon(1e-10));
+    CHECK(vacancies == 7);
+    CHECK(gini == doctest::Approx(0.333333333).epsilon(1e-10));
+    CHECK(total_money == doctest::Approx(5000.111).epsilon(1e-10));
+
+    std::remove(path.c_str());
+}
+
+TEST_CASE("precision retention for high-precision values") {
+    const std::string path = "test_precision.csv";
+    std::remove(path.c_str());
+    {
+        CsvRecorder rec(path);
+        Metrics m{};
+        m.month = 1;
+        m.unemployment_rate = 0.1;
+        m.mean_price = 1.0;
+        m.mean_wage = 30.0;
+        m.total_production = 100.0;
+        m.vacancies = 0;
+        m.gini = 0.5;
+        m.total_money = 100000.000000123;  // High precision value
+        rec.record(m);
+    }
+
+    std::ifstream in(path);
+    REQUIRE(in.good());
+    std::string header;
+    std::getline(in, header);
+
+    std::string line;
+    REQUIRE(std::getline(in, line));
+
+    // Parse the total_money field (last field)
+    std::stringstream ss(line);
+    int month;
+    double unemployment_rate, mean_price, mean_wage, total_production, gini, total_money;
+    int vacancies;
+    char comma;
+
+    ss >> month >> comma >> unemployment_rate >> comma >> mean_price >> comma
+       >> mean_wage >> comma >> total_production >> comma >> vacancies >> comma
+       >> gini >> comma >> total_money;
+
+    // The precision should be close to the original, within 1e-9
+    CHECK(total_money == doctest::Approx(100000.000000123).epsilon(1e-9));
+
+    std::remove(path.c_str());
+}
+
+TEST_CASE("csv recorder throws when output directory does not exist") {
+    const std::string path = "no_such_dir_xyz/out.csv";
+    CHECK_THROWS_AS([](){ CsvRecorder("no_such_dir_xyz/out.csv"); }(), std::runtime_error);
 }
