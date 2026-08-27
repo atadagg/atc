@@ -17,6 +17,14 @@ struct Metrics {
     int vacancies = 0;
     double gini = 0.0;
     double total_money = 0.0;
+
+    // Demand side, all in goods units for the month just closed. `demand` is
+    // demand *wanted* (what firms were asked for, including what they could
+    // not serve), not units sold -- see the demand-recording note in CLAUDE.md.
+    double demand = 0.0;
+    double planned_consumption = 0.0;
+    double inventory = 0.0;
+    double household_liquidity = 0.0;
 };
 
 Metrics compute_metrics(const World& w, int month);

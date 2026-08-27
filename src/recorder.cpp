@@ -33,6 +33,10 @@ Metrics compute_metrics(const World& w, int month) {
         price_sum += f.price;
         wage_sum += f.wage;
         if (f.has_open_vacancy) ++m.vacancies;
+        // month_close::roll_demand ran last, so demand_last_month is the
+        // demand faced during the month just closed.
+        m.demand += f.demand_last_month;
+        m.inventory += f.inventory;
     }
     m.mean_price = price_sum / static_cast<double>(w.firms.size());
     m.mean_wage = wage_sum / static_cast<double>(w.firms.size());
@@ -52,6 +56,11 @@ Metrics compute_metrics(const World& w, int month) {
     const double n = static_cast<double>(x.size());
     m.gini = (sum > 0.0) ? (2.0 * weighted) / (n * sum) - (n + 1.0) / n : 0.0;
 
+    for (const auto& h : w.households) {
+        m.planned_consumption += h.planned_consumption;
+        m.household_liquidity += h.liquidity;
+    }
+
     m.total_money = w.total_money();
     return m;
 }
@@ -62,11 +71,14 @@ CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
     }
     out_ << std::setprecision(15);
     out_ << "month,unemployment_rate,mean_price,mean_wage,"
-            "daily_capacity,vacancies,gini,total_money\n";
+            "daily_capacity,vacancies,gini,total_money,"
+            "demand,planned_consumption,inventory,household_liquidity\n";
 }
 
 void CsvRecorder::record(const Metrics& m) {
     out_ << m.month << ',' << m.unemployment_rate << ',' << m.mean_price << ','
          << m.mean_wage << ',' << m.daily_capacity << ',' << m.vacancies << ','
-         << m.gini << ',' << m.total_money << '\n';
+         << m.gini << ',' << m.total_money << ',' << m.demand << ','
+         << m.planned_consumption << ',' << m.inventory << ','
+         << m.household_liquidity << '\n';
 }
