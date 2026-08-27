@@ -1,28 +1,38 @@
 #include "world.hpp"
 
-#include <numeric>
+#include <algorithm>
+#include <cassert>
 
 World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
+    assert(n_households > 0);
+    assert(n_firms > 0);
+
     firms.resize(n_firms);
     households.resize(n_households);
 
     for (uint32_t h = 0; h < n_households; ++h) {
         Household& hh = households[h];
 
-        // Seven distinct shop connections, drawn without replacement.
-        // The initial network is scaffolding only; it is expected to wash
-        // out during burn-in.
+        // Assign shop connections. Distinctness is preserved when n_firms >= 7;
+        // for smaller test worlds with fewer firms, shop slots may repeat.
+        const uint32_t distinct_target = std::min<uint32_t>(params::kShopsPerHousehold, n_firms);
         for (uint32_t s = 0; s < params::kShopsPerHousehold; ++s) {
-            uint32_t candidate;
-            bool duplicate;
-            do {
-                candidate = rng.index(n_firms);
-                duplicate = false;
-                for (uint32_t prior = 0; prior < s; ++prior) {
-                    if (hh.shops[prior] == candidate) { duplicate = true; break; }
-                }
-            } while (duplicate);
-            hh.shops[s] = candidate;
+            if (s < distinct_target) {
+                // Draw without replacement while pool is large enough.
+                uint32_t candidate;
+                bool duplicate;
+                do {
+                    candidate = rng.index(n_firms);
+                    duplicate = false;
+                    for (uint32_t prior = 0; prior < s; ++prior) {
+                        if (hh.shops[prior] == candidate) { duplicate = true; break; }
+                    }
+                } while (duplicate);
+                hh.shops[s] = candidate;
+            } else {
+                // Pool is exhausted; accept repeats in small-world test cases.
+                hh.shops[s] = rng.index(n_firms);
+            }
         }
 
         // Start fully employed, spread evenly across firms. Unemployment must

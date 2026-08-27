@@ -56,3 +56,34 @@ TEST_CASE("total money is the sum of all liquidity") {
                     + params::kNumFirms * params::kInitialFirmLiquidity;
     CHECK(w.total_money() == doctest::Approx(expected));
 }
+
+TEST_CASE("small world (fewer firms than shops) completes and is valid") {
+    // Regression test for infinite loop when n_firms < kShopsPerHousehold.
+    // With 2 firms and 7 shops per household, shops must repeat; the
+    // constructor must still complete (not hang).
+    Rng rng(1);
+    World w(10, 2, rng);
+    CHECK(w.households.size() == 10);
+    CHECK(w.firms.size() == 2);
+    for (const auto& h : w.households) {
+        for (uint32_t s : h.shops) {
+            CHECK(s < 2);  // All shop indices are valid (0 or 1)
+        }
+    }
+}
+
+TEST_CASE("degenerate single-firm world is valid") {
+    // Test the edge case of a single firm. All households must be employed
+    // by firm 0, and all shop slots must reference firm 0.
+    Rng rng(1);
+    World w(4, 1, rng);
+    CHECK(w.households.size() == 4);
+    CHECK(w.firms.size() == 1);
+    for (uint32_t h = 0; h < 4; ++h) {
+        CHECK(w.households[h].employer == 0);
+        for (uint32_t s : w.households[h].shops) {
+            CHECK(s == 0);
+        }
+    }
+    CHECK(w.firms[0].employees.size() == 4);
+}
