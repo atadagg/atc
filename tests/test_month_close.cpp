@@ -54,6 +54,51 @@ TEST_CASE("profits are distributed in proportion to household liquidity") {
     CHECK(w.total_money() == doctest::Approx(before));
 }
 
+TEST_CASE("profit distribution across multiple firms does not create money") {
+    // Regression test for a previously-fixed bug: distribute_profits used to
+    // recompute each household's share against a liquidity total captured
+    // once before the whole loop, while the numerator (household liquidity)
+    // kept growing as earlier firms' profits were credited. From the second
+    // firm onward the per-household ratios summed to more than 1, so each
+    // subsequent firm distributed more than its own profit -- pure money
+    // creation. The current implementation snapshots every household's
+    // liquidity (and the total) once, before any firm distributes, and uses
+    // that fixed snapshot for every firm's split.
+    //
+    // 3 firms, 3 households, distinct liquidities and distinct distributable
+    // profits so that a stale-total bug would visibly diverge from the
+    // correct fixed-proportion split by the third firm.
+    Rng rng(1);
+    World w(3, 3, rng);
+
+    w.households[0].liquidity = 100.0;
+    w.households[1].liquidity = 200.0;
+    w.households[2].liquidity = 300.0;
+
+    // Zero wage => zero buffer => the firm's entire liquidity is its
+    // distributable profit, regardless of employee headcount.
+    for (auto& f : w.firms) f.wage = 0.0;
+    w.firms[0].liquidity = 30.0;
+    w.firms[1].liquidity = 60.0;
+    w.firms[2].liquidity = 90.0;
+
+    double before = w.total_money();
+    CHECK(before == doctest::Approx(100.0 + 200.0 + 300.0 + 30.0 + 60.0 + 90.0));
+
+    month_close::distribute_profits(w);
+
+    // Correct behaviour: every firm splits its profit in the SAME fixed
+    // proportions (100:200:300 of the initial 600 total), independent of
+    // distribution order. Total profit distributed is 30+60+90=180.
+    CHECK(w.households[0].liquidity == doctest::Approx(100.0 + 180.0 * (100.0 / 600.0)));
+    CHECK(w.households[1].liquidity == doctest::Approx(200.0 + 180.0 * (200.0 / 600.0)));
+    CHECK(w.households[2].liquidity == doctest::Approx(300.0 + 180.0 * (300.0 / 600.0)));
+
+    for (const auto& f : w.firms) CHECK(f.liquidity == doctest::Approx(0.0));
+
+    CHECK(w.total_money() == doctest::Approx(before));
+}
+
 TEST_CASE("a firm retains its buffer before distributing profit") {
     Rng rng(1);
     World w(4, 1, rng);
