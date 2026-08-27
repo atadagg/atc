@@ -57,6 +57,16 @@ inline constexpr double kInitialPrice = 1.0;
 inline constexpr double kInitialWage = 30.0;
 inline constexpr double kInitialInventory = 0.0;
 
+// --- Emergency wage cut bounds (not specified by the paper) ---
+// Lengnick's no-bankruptcy rule (§2.4) cuts the wage to whatever the firm can
+// afford. Unbounded, a firm that sells nothing repeatedly cuts by ~90% a month
+// and reaches zero -- and zero is absorbing, because every recovery channel in
+// firm_decisions::adjust_wage is multiplicative. A zero wage also collapses the
+// price band to [0, 0], permanently disabling that firm's price-raise gate.
+// These two bounds keep the rule intact while removing the absorbing state.
+inline constexpr double kMaxEmergencyWageCut = 0.5;
+inline constexpr double kMinWage = 1.0;
+
 // --- Run configuration (not specified by the paper) ---
 inline constexpr int kBurnInMonths = 1000;
 inline constexpr int kMeasurementMonths = 6000;

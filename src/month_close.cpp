@@ -15,17 +15,31 @@ void pay_wages(World& w) {
         if (headcount == 0.0) continue;
 
         double bill = f.wage * headcount;
+        double per_worker = f.wage;
 
         // Lengnick 2013 §2.4: rather than allow bankruptcy, employees accept
         // a wage cut just large enough to keep the firm operating. This is
         // what keeps the firm count constant with no entry or exit.
         if (bill > f.liquidity) {
-            f.wage = std::max(0.0, f.liquidity / headcount);
-            bill = f.wage * headcount;
+            // The firm still pays out everything it holds -- that part is the
+            // paper's rule and is what conserves money here.
+            per_worker = f.liquidity / headcount;
+            bill = per_worker * headcount;
+
+            // The posted wage, however, is floored. Cutting it all the way to
+            // what this month happened to afford drives a persistently
+            // unprofitable firm to zero geometrically, and zero is absorbing:
+            // adjust_wage only ever multiplies, so 0 * (1 + mu) == 0 forever,
+            // and marginal_cost 0 collapses the price band to [0, 0]. The
+            // shortfall is arrears the firm owes its workers, not a licence to
+            // post a wage it can never climb back from.
+            double bounded = std::max(f.wage * (1.0 - params::kMaxEmergencyWageCut),
+                                      params::kMinWage);
+            f.wage = std::max(per_worker, bounded);
         }
 
         f.liquidity -= bill;
-        for (uint32_t h : f.employees) w.households[h].liquidity += f.wage;
+        for (uint32_t h : f.employees) w.households[h].liquidity += per_worker;
     }
 }
 

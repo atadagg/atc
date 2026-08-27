@@ -3,6 +3,7 @@
 #include "network.hpp"
 #include "world.hpp"
 #include "params.hpp"
+#include "firm_decisions.hpp"
 
 TEST_CASE("wages move money from firms to their employees") {
     Rng rng(1);
@@ -184,4 +185,39 @@ TEST_CASE("a full month close conserves money") {
     double before = w.total_money();
     month_close::run(w);
     CHECK(w.total_money() == doctest::Approx(before));
+}
+
+TEST_CASE("an emergency wage cut is bounded and never reaches zero") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.wage = 100.0;
+    f.liquidity = 0.0;  // sold nothing all month: the worst possible case
+    REQUIRE(!f.employees.empty());
+
+    month_close::pay_wages(w);
+
+    // Unbounded, the cut lands exactly on zero, and zero is absorbing under
+    // the multiplicative updates in firm_decisions::adjust_wage.
+    CHECK(f.wage > 0.0);
+    CHECK(f.wage >= params::kMinWage);
+    CHECK(f.wage >= 100.0 * (1.0 - params::kMaxEmergencyWageCut));
+}
+
+TEST_CASE("repeated emergency cuts cannot drive a wage to zero") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.wage = 100.0;
+    REQUIRE(!f.employees.empty());
+
+    for (int month = 0; month < 200; ++month) {
+        f.liquidity = 0.0;  // never sells anything, ever
+        month_close::pay_wages(w);
+    }
+
+    CHECK(f.wage >= params::kMinWage);
+    // A zero wage collapses the price band to [0, 0], which permanently
+    // disables the price-raise gate in firm_decisions::adjust_price.
+    CHECK(firm_decisions::marginal_cost(f) > 0.0);
 }
