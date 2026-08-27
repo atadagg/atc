@@ -25,6 +25,12 @@ add_library(economy_core
 )
 target_include_directories(economy_core PUBLIC src)
 
+add_library(viewer_core
+    viewer/sim.cpp
+)
+target_link_libraries(viewer_core PUBLIC economy_core)
+target_include_directories(viewer_core PUBLIC viewer)
+
 enable_testing()
 add_executable(economy_tests
     tests/test_main.cpp
@@ -37,8 +43,9 @@ add_executable(economy_tests
     tests/test_month_close.cpp
     tests/test_scheduler.cpp
     tests/test_recorder.cpp
+    tests/test_viewer_sim.cpp
 )
-target_link_libraries(economy_tests PRIVATE economy_core)
+target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
 target_include_directories(economy_tests PRIVATE third_party)
 add_test(NAME economy_tests COMMAND economy_tests)
 
