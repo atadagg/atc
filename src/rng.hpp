@@ -23,5 +23,12 @@ public:
     void shuffle(std::vector<uint32_t>& v);
 
 private:
+    // Raw 64-bit draw from the engine. All other methods build their
+    // conversions from this by hand (see rng.cpp) rather than going
+    // through <random>'s distribution classes, whose engine-output-to-value
+    // mapping is implementation-defined and not guaranteed stable across
+    // standard library versions/vendors for a fixed seed.
+    uint64_t next_u64();
+
     std::mt19937_64 engine_;
 };
