@@ -141,3 +141,97 @@ TEST_CASE("price is untouched when inventory is inside the bands") {
     for (int i = 0; i < 50; ++i) firm_decisions::adjust_price(f, rng);
     CHECK(f.price == doctest::Approx(5.0));
 }
+
+TEST_CASE("raise branch never lowers price even when price exceeds the cap") {
+    Rng rng(1);
+    Firm f;
+    f.wage = 30.0;  // realistic initial wage
+    f.demand_last_month = 100.0;
+    f.inventory = 1.0;  // below lower band, triggers raise branch
+    f.price = 1.0;  // realistic initial price, which is above its own cap
+    double mc = firm_decisions::marginal_cost(f);
+    double price_cap = params::kPriceUpperFactor * mc;
+    CHECK(f.price > price_cap);  // verify price starts above cap
+
+    for (int i = 0; i < 200; ++i) {
+        double before = f.price;
+        firm_decisions::adjust_price(f, rng);
+        // The raise branch should never cut the price; it should stay >= before value
+        CHECK(f.price >= before - 1e-9);
+    }
+}
+
+TEST_CASE("lower branch never raises price even when price falls below the floor") {
+    Rng rng(1);
+    Firm f;
+    f.wage = 63.0;
+    f.demand_last_month = 100.0;
+    f.inventory = 1000.0;  // above upper band, triggers lower branch
+    double mc = firm_decisions::marginal_cost(f);
+    double price_floor = params::kPriceLowerFactor * mc;
+    f.price = price_floor * 0.5;  // set price well below the floor
+    CHECK(f.price < price_floor);  // verify price starts below floor
+
+    for (int i = 0; i < 200; ++i) {
+        double before = f.price;
+        firm_decisions::adjust_price(f, rng);
+        // The lower branch should never raise the price; it should stay <= before value
+        CHECK(f.price <= before + 1e-9);
+    }
+}
+
+TEST_CASE("zero demand_last_month does not open vacancy or mark firing") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.demand_last_month = 0.0;
+    f.inventory = 0.0;
+    f.has_open_vacancy = false;
+
+    firm_decisions::adjust_workforce(w, 0, rng);
+
+    CHECK_FALSE(f.has_open_vacancy);
+    CHECK(f.pending_fire == NO_HOUSEHOLD);
+}
+
+TEST_CASE("zero demand_last_month does not trigger price adjustment") {
+    Rng rng(1);
+    Firm f;
+    f.wage = 63.0;
+    f.demand_last_month = 0.0;
+    f.inventory = 0.0;
+    f.price = 5.0;
+
+    firm_decisions::adjust_price(f, rng);
+
+    CHECK(f.price == doctest::Approx(5.0));
+}
+
+TEST_CASE("inventory exactly at lower band edge does not open vacancy") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.demand_last_month = 100.0;
+    double lower = params::kInventoryLowerFactor * 100.0;
+    f.inventory = lower;  // exactly at the edge
+    f.has_open_vacancy = false;
+
+    firm_decisions::adjust_workforce(w, 0, rng);
+
+    CHECK_FALSE(f.has_open_vacancy);
+    CHECK(f.pending_fire == NO_HOUSEHOLD);
+}
+
+TEST_CASE("inventory exactly at upper band edge does not mark firing") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.demand_last_month = 100.0;
+    double upper = params::kInventoryUpperFactor * 100.0;
+    f.inventory = upper;  // exactly at the edge
+    f.pending_fire = NO_HOUSEHOLD;
+
+    firm_decisions::adjust_workforce(w, 0, rng);
+
+    CHECK(f.pending_fire == NO_HOUSEHOLD);
+}

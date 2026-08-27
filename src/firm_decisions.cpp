@@ -50,10 +50,17 @@ void adjust_price(Firm& f, Rng& rng) {
     double proposed = f.price;
     if (f.inventory < lower_inv) {
         double nu = rng.uniform(0.0, params::kPriceAdjustMax);
-        proposed = std::min(f.price * (1.0 + nu), price_cap);
+        // Raise only while below the cap. A price already at or above the cap is
+        // left alone: clamping it down here would turn a raise into a large cut.
+        proposed = (f.price < price_cap)
+                       ? std::min(f.price * (1.0 + nu), price_cap)
+                       : f.price;
     } else if (f.inventory > upper_inv) {
         double nu = rng.uniform(0.0, params::kPriceAdjustMax);
-        proposed = std::max(f.price * (1.0 - nu), price_floor);
+        // Symmetric: lower only while above the floor.
+        proposed = (f.price > price_floor)
+                       ? std::max(f.price * (1.0 - nu), price_floor)
+                       : f.price;
     } else {
         return;  // inventory is comfortable; price is not reconsidered
     }
