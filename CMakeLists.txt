@@ -27,6 +27,7 @@ target_include_directories(economy_core PUBLIC src)
 
 add_library(viewer_core
     viewer/sim.cpp
+    viewer/ring_recorder.cpp
 )
 target_link_libraries(viewer_core PUBLIC economy_core)
 target_include_directories(viewer_core PUBLIC viewer)
@@ -44,6 +45,7 @@ add_executable(economy_tests
     tests/test_scheduler.cpp
     tests/test_recorder.cpp
     tests/test_viewer_sim.cpp
+    tests/test_viewer_ring.cpp
 )
 target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
 target_include_directories(economy_tests PRIVATE third_party)
