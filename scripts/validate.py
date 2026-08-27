@@ -1,9 +1,10 @@
 """Stdlib-only validation of the v1 success criteria.
 
-matplotlib/pandas are not available in this environment (Arch Linux, PEP 668,
-no pip). This script reproduces the numeric checks from plot.py using only
-`csv` and `math` from the standard library, so the four criteria can be
-measured without any third-party dependency.
+Uses only `csv` and `math` from the standard library, so the four criteria can
+be measured with no third-party dependency and no virtual environment.
+(matplotlib and pandas *are* installable here -- see CLAUDE.md -- but nothing
+in this file needs them.) `scripts/report.py` imports `load` and `compute`
+from here so the HTML review page and this terminal output cannot drift apart.
 
 Usage: python3 scripts/validate.py [path/to/run.csv]
 """
@@ -33,13 +34,11 @@ def pearson(xs, ys):
     return cov / (sx * sy)
 
 
-def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "output/run.csv"
-
+def load(path):
+    """Read the run CSV into a list of dicts of the columns the criteria need."""
     rows = []
     with open(path, newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+        for row in csv.DictReader(f):
             rows.append({
                 "month": int(row["month"]),
                 "unemployment_rate": float(row["unemployment_rate"]),
@@ -50,10 +49,16 @@ def main():
                 "gini": float(row["gini"]),
                 "total_money": float(row["total_money"]),
             })
+    return rows
 
+
+def compute(rows):
+    """Every number the success criteria need, as a flat dict.
+
+    The single source of truth for the criteria math: `main` prints from this
+    dict and `scripts/report.py` renders the same dict into HTML.
+    """
     n = len(rows)
-    print(f"loaded {n} rows from {path}")
-    print()
 
     unemployment = [r["unemployment_rate"] for r in rows]
     vacancies = [r["vacancies"] for r in rows]
@@ -67,42 +72,64 @@ def main():
     ]
     unemployment_tail = unemployment[1:]
 
+    tenth = max(1, n // 10)
+    m_min, m_max = min(total_money), max(total_money)
+
+    return {
+        "n": n,
+        "month_first": rows[0]["month"],
+        "month_last": rows[-1]["month"],
+        "u_mean": mean(unemployment),
+        "u_sd": stdev(unemployment),
+        "u_min": min(unemployment),
+        "u_max": max(unemployment),
+        "phillips": pearson(unemployment_tail, wage_inflation),
+        "beveridge": pearson(unemployment, vacancies),
+        "gini_mean": mean(gini),
+        "gini_tenth": tenth,
+        "gini_early": mean(gini[:tenth]),
+        "gini_late": mean(gini[-tenth:]),
+        "money_min": m_min,
+        "money_max": m_max,
+        "money_spread": m_max - m_min,
+    }
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else "output/run.csv"
+
+    rows = load(path)
+    c = compute(rows)
+    print(f"loaded {c['n']} rows from {path}")
+    print()
+
     # --- Criterion 1: endogenous unemployment fluctuation ---
-    u_mean = mean(unemployment)
-    u_sd = stdev(unemployment)
-    u_min, u_max = min(unemployment), max(unemployment)
     print("Criterion 1: endogenous unemployment fluctuation")
-    print(f"  unemployment_rate: mean={u_mean:.4f} sd={u_sd:.4f} "
-          f"min={u_min:.4f} max={u_max:.4f}  (want sd > 0, visible cycling)")
+    print(f"  unemployment_rate: mean={c['u_mean']:.4f} sd={c['u_sd']:.4f} "
+          f"min={c['u_min']:.4f} max={c['u_max']:.4f}  (want sd > 0, visible cycling)")
     print()
 
     # --- Criterion 2: Phillips curve ---
-    corr_phillips = pearson(unemployment_tail, wage_inflation)
     print("Criterion 2: Phillips curve (unemployment vs wage inflation)")
-    print(f"  correlation = {corr_phillips:+.4f}  (want negative)")
+    print(f"  correlation = {c['phillips']:+.4f}  (want negative)")
     print()
 
     # --- Criterion 3: Beveridge curve ---
-    corr_beveridge = pearson(unemployment, vacancies)
     print("Criterion 3: Beveridge curve (unemployment vs vacancies)")
-    print(f"  correlation = {corr_beveridge:+.4f}  (want negative)")
+    print(f"  correlation = {c['beveridge']:+.4f}  (want negative)")
     print()
 
     # --- Criterion 4: wealth dispersion ---
-    gini_mean = mean(gini)
-    tenth = max(1, n // 10)
-    gini_early = mean(gini[:tenth])
-    gini_late = mean(gini[-tenth:])
     print("Criterion 4: wealth dispersion (Gini of household liquidity)")
-    print(f"  mean={gini_mean:.4f}  (want > 0)")
-    print(f"  early (first {tenth} months) = {gini_early:.4f}, "
-          f"late (last {tenth} months) = {gini_late:.4f}  (want: no collapse to 0)")
+    print(f"  mean={c['gini_mean']:.4f}  (want > 0)")
+    print(f"  early (first {c['gini_tenth']} months) = {c['gini_early']:.4f}, "
+          f"late (last {c['gini_tenth']} months) = {c['gini_late']:.4f}  (want: no collapse to 0)")
     print()
 
     # --- Money conservation across the whole run ---
-    m_min, m_max = min(total_money), max(total_money)
     print("Money conservation across the run")
-    print(f"  min={m_min:.9f} max={m_max:.9f} spread={m_max - m_min:.9f}")
+    print(f"  min={c['money_min']:.9f} max={c['money_max']:.9f} "
+          f"spread={c['money_spread']:.9f}")
 
 
 if __name__ == "__main__":

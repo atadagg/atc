@@ -18,3 +18,10 @@ compile_commands.json
 .vscode/
 .idea/
 *.swp
+
+# Local Python environment for scripts/plot.py (matplotlib, pandas).
+# Create with: python3 -m venv .venv && .venv/bin/python -m pip install matplotlib pandas
+.venv/
+
+# Python bytecode from scripts/ importing across modules.
+__pycache__/
