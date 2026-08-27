@@ -1,11 +1,15 @@
 #include "world.hpp"
 
 #include <algorithm>
-#include <cassert>
+#include <stdexcept>
 
 World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
-    assert(n_households > 0);
-    assert(n_firms > 0);
+    if (n_households == 0) {
+        throw std::invalid_argument("World: n_households must be > 0");
+    }
+    if (n_firms == 0) {
+        throw std::invalid_argument("World: n_firms must be > 0");
+    }
 
     firms.resize(n_firms);
     households.resize(n_households);

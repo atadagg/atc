@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
 #include <vector>
 
 TEST_CASE("same seed produces identical sequences") {
@@ -107,6 +108,12 @@ TEST_CASE("shuffle is deterministic for a given seed and permutes") {
     std::vector<uint32_t> sorted = a;
     std::sort(sorted.begin(), sorted.end());
     for (uint32_t i = 0; i < 10; ++i) CHECK(sorted[i] == i);
+}
+
+TEST_CASE("index(0) throws instead of dividing by zero") {
+    // assert() compiles out under NDEBUG (the default Release build), so
+    // this precondition violation must be a real, always-active throw.
+    CHECK_THROWS_AS(Rng(1).index(0), std::invalid_argument);
 }
 
 TEST_CASE("shuffle diverges for different seeds") {

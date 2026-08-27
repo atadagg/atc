@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <set>
+#include <stdexcept>
 
 TEST_CASE("world is created with the requested populations") {
     Rng rng(1);
@@ -70,6 +71,18 @@ TEST_CASE("small world (fewer firms than shops) completes and is valid") {
             CHECK(s < 2);  // All shop indices are valid (0 or 1)
         }
     }
+}
+
+TEST_CASE("zero firms throws instead of dividing by zero") {
+    // assert() compiles out under NDEBUG (the default Release build), so
+    // this precondition violation must be a real, always-active throw.
+    Rng rng(1);
+    CHECK_THROWS_AS(World(10, 0, rng), std::invalid_argument);
+}
+
+TEST_CASE("zero households throws") {
+    Rng rng(1);
+    CHECK_THROWS_AS(World(0, 10, rng), std::invalid_argument);
 }
 
 TEST_CASE("degenerate single-firm world is valid") {

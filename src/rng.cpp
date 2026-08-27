@@ -1,9 +1,9 @@
 #include "rng.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <cstddef>
 #include <limits>
+#include <stdexcept>
 
 uint64_t Rng::next_u64() {
     return engine_();
@@ -24,7 +24,9 @@ double Rng::uniform(double lo, double hi) {
 }
 
 uint32_t Rng::index(uint32_t n) {
-    assert(n > 0 && "Rng::index precondition violated: n must be > 0");
+    if (n == 0) {
+        throw std::invalid_argument("Rng::index: n must be > 0");
+    }
     // Hand-rolled instead of std::uniform_int_distribution: same portability
     // concern as uniform() above. Plain `raw % n` would also be biased
     // whenever n does not evenly divide 2^64, silently skewing agent

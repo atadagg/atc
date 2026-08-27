@@ -13,7 +13,7 @@ public:
     // Uniform real in [lo, hi).
     double uniform(double lo, double hi);
 
-    // Uniform integer in [0, n). Precondition: n > 0.
+    // Uniform integer in [0, n). Throws std::invalid_argument if n == 0.
     uint32_t index(uint32_t n);
 
     // True with probability p.
