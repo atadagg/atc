@@ -1,0 +1,27 @@
+#pragma once
+
+#include <cstdint>
+#include <random>
+#include <vector>
+
+// Deterministic RNG. Every source of randomness in the simulation must
+// draw from an instance of this, passed explicitly. Same seed => same run.
+class Rng {
+public:
+    explicit Rng(uint64_t seed) : engine_(seed) {}
+
+    // Uniform real in [lo, hi).
+    double uniform(double lo, double hi);
+
+    // Uniform integer in [0, n). Precondition: n > 0.
+    uint32_t index(uint32_t n);
+
+    // True with probability p.
+    bool chance(double p);
+
+    // In-place Fisher-Yates using this engine.
+    void shuffle(std::vector<uint32_t>& v);
+
+private:
+    std::mt19937_64 engine_;
+};
