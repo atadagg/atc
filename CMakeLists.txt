@@ -14,6 +14,7 @@ add_library(economy_core
     src/network.cpp
     src/firm_decisions.cpp
     src/household_decisions.cpp
+    src/daily.cpp
 )
 target_include_directories(economy_core PUBLIC src)
 
@@ -25,6 +26,7 @@ add_executable(economy_tests
     tests/test_network.cpp
     tests/test_firm_decisions.cpp
     tests/test_household_decisions.cpp
+    tests/test_daily.cpp
 )
 target_link_libraries(economy_tests PRIVATE economy_core)
 target_include_directories(economy_tests PRIVATE third_party)
