@@ -367,76 +367,208 @@ order; each attaches at a named module.
 
 ---
 
-## 11. v1 results (2026-08-27, re-measured after the fix wave)
+## 11. v1 results (2026-08-27, re-measured after the zero-wage fix)
 
-Measured with `./build/economy --seed 1 --burn-in 1000 --months 6000 --out
-output/run.csv` (1000 households, 100 firms, unmodified Table 1 calibration,
-no exogenous shocks) and `scripts/validate.py` (Python stdlib only —
-matplotlib/pandas are unavailable in this environment; `scripts/plot.py` is
-kept as written but unexecuted). Runtime: ~14s for the full 7000-month run.
-Money conservation: drift `+3.0e-9`, spread over the whole run
-`4.0e-9` — the master invariant holds throughout.
+Measured with `./build/economy --seed 1 --burn-in 1000 --months 6000`
+(1000 households, 100 firms, unmodified Table 1 calibration, no exogenous
+shocks) and `scripts/validate.py`. Money conservation: drift `0.0`, spread
+`2.0e-9` over the whole run — the master invariant holds throughout.
+Confirmed on seeds 2, 3 and 4; determinism re-verified byte-for-byte.
 
-**These numbers supersede the ones originally recorded in this section.**
-The shopping-retry fix (redrawing a shop slot with replacement, up to 7
-times a day, was changed to a random permutation visiting each of the 7
-connected shops at most once) changes simulation output, so a full re-run
-was required. Determinism and burn-in independence both still hold:
-identical seeds byte-for-byte reproduce a run, and the `Rng`-seeded
-network-independence test (300-month warm-up, differing only in the initial
-random network) now gives mean unemployment of 0.933% vs. 0.705% for two
-different network seeds under the same dynamics seed — a 0.228pp gap, well
-inside the test's now-tightened 1pp tolerance (previously 15pp, which no
-plausible dependence could have tripped).
+**All four criteria now pass.** The numbers below supersede every earlier
+version of this section.
 
-| # | Criterion | Measured (before fix wave) | Measured (after fix wave) | Verdict |
+| # | Criterion | Before | After | Verdict |
 |---|---|---|---|---|
-| 1 | Endogenous unemployment fluctuation | mean 0.86%, sd 0.45pp, range [0.0%, 2.8%] | mean 0.80%, sd 0.44pp, range [0.0%, 2.7%]; lag-1 autocorrelation 0.92 decaying to ≈0 by lag 12 (mean-reverting noise, not a boom/bust cycle) | **FAIL (in substance)** |
-| 2 | Phillips curve (unemployment vs. wage inflation) | correlation −0.103 | correlation −0.111 | PASS (weak) |
-| 3 | Beveridge curve (unemployment vs. vacancies) | correlation −0.237 | correlation −0.339 | PASS |
-| 4 | Wealth dispersion (Gini of household liquidity) | mean 0.025, range [0.011, 0.054] | mean 0.0265, range [0.0112, 0.0502], first-decile (first 600 months) mean 0.0317 vs. last-decile (last 600 months) mean 0.0223 | PASS |
+| 1 | Endogenous unemployment fluctuation | mean 0.80%, sd 0.44pp, max 2.7%; autocorrelation ≈0 by lag 12 | mean 1.73%, sd 2.85pp, max 12.6%; autocorrelation −0.36 still at lag 36 | **PASS** |
+| 2 | Phillips curve | −0.111 | **−0.445** | PASS |
+| 3 | Beveridge curve | −0.339 | **−0.842** | PASS |
+| 4 | Wealth dispersion (Gini) | mean 0.0265, falling 0.032 → 0.022 | mean 0.102, rising 0.067 → 0.106 | PASS |
 
-Mean open vacancies: 57.4 of 100 firms before the fix wave, **58.1** after —
-essentially unchanged. This is the clearest single indicator that Fix 2 (the
-shopping-retry fix) moved the *numbers* without moving the *dynamics*: it
-tightened up which firm absorbs a given day's demand, but did not relieve
-the chronic vacancy glut that is the real driver of criterion 1's verdict.
+### 11.1 Root cause of the criterion-1 failure
 
-**Criterion 1 in detail (verdict unchanged from before the fix wave).**
-Unemployment is *not* pinned at literal zero — it moves, sd > 0 is
-technically satisfied, and only 1.1% of post-burn-in months show exactly
-0%. But the entire post-burn-in run stays confined to a 0.0–2.7% band around
-a 0.80% mean, with autocorrelation that decays to noise within about a year
-— i.e. small mean-reverting fluctuation, not the multi-percent boom/bust
-cycling (Lengnick reports unemployment ranging roughly 0–20% with a mean
-around 5%) the criterion is meant to detect. Vacancies stay chronically high
-(mean ~58 of 100 firms unfilled) at the same time, which is the tell: an
-unemployed household's job search (`β=5` random firm visits against a ~58%
-vacancy rate) finds and accepts an open position almost every month it's out
-of work, so unemployment cannot accumulate long enough to swing. Every rule
-inspected — `firm_decisions::adjust_workforce`,
-`household_decisions::search_job`, `network::hire`/`fire`,
-`month_close::apply_pending_fires` — matches the spec's §5 text and the
-plan's calibration table verbatim; the "Known ambiguity" household-φ note
-was already followed correctly (no such parameter exists in the code). No
-implementation bug was found in the diagnosis order the plan specifies, and
-the shopping-retry fix (Fix 2 of the pre-merge review) — while a genuine
-correctness fix on its own terms — did not change this picture: vacancies
-are essentially unchanged (57.4 → 58.1) and unemployment's range and
-autocorrelation structure are essentially unchanged. This is reported as a
-genuine finding, not patched: the mismatch between this run's
-near-full-employment equilibrium and Lengnick's published cyclical
-unemployment is most likely either a subtler calibration/behavioral gap
-still to be located, or a feature of Lengnick's model not fully captured by
-this reading of the paper — not something to fix by adjusting Table 1
-constants.
+**67 of 100 firms held a wage of exactly `0.0`, permanently.** The chain:
 
-Criteria 2–4 pass on their stated numeric thresholds, though 2 and 3 are
-correlated with (and plausibly weakened by) criterion 1's muted amplitude:
-a Phillips/Beveridge relationship measured over a 0–2.7% unemployment range
-is a much weaker test than one measured over 0–20%. Criterion 3's
-correlation strengthened from −0.237 to −0.339 after the fix wave; given
-that vacancies and unemployment's range are both essentially unchanged,
-this shift is attributed to the fix-wave changes altering month-to-month
-noise correlation rather than to any change in the underlying relationship,
-and is not treated as evidence of a stronger Beveridge relationship.
+1. `month_close::distribute_profits` strips every firm to
+   `buffer = χ × wage_bill` (χ = 0.1), so a firm meets payday holding 10% of
+   its own payroll.
+2. A firm that sells poorly triggers Lengnick's no-bankruptcy rule (§2.4) in
+   `month_close::pay_wages`, which set `wage = liquidity / headcount` — a
+   ~90% cut. Repeated monthly, this is geometric decay to zero.
+3. **Zero is an absorbing state.** Every wage-recovery channel in
+   `firm_decisions::adjust_wage` is multiplicative (`wage *= (1 + μ)`), so
+   `0` stays `0` forever. `bill = 0 × headcount = 0` also means the
+   emergency branch never fires again — the state is sealed.
+4. `marginal_cost = wage / (λ·21) = 0` collapses the price band to `[0, 0]`.
+   Since the raise gate requires `price < cap`, those firms could never
+   raise a price again. This is the "frozen price level" observed earlier.
+5. A firm with zero labour cost cannot be outcompeted and never downsizes.
+   Two thirds of the market was inert — which is precisely why the labour
+   market could not move. Zombie firms also had `buffer = 0.1 × 0 = 0`, so
+   they distributed *all* revenue as profit each month, inflating household
+   liquidity.
+
+Measured over 6000 months, the wage process ran 324,962 raises (mean
++0.94%), 5,524 tenure cuts (mean −0.95%) and 2,754 emergency cuts — of
+which **67 landed exactly on zero**, one per zombie firm.
+
+### 11.2 The fix
+
+`pay_wages` still pays out everything the firm holds — that is the paper's
+rule and what conserves money — but the *posted* wage is now bounded below
+by `kMaxEmergencyWageCut` (50% maximum cut per month) and `kMinWage`. The
+unpaid remainder is arrears, not a wage the firm can never climb back from.
+Both constants are invented for this implementation and live in the
+invented-constants section of `params.hpp`; neither is a Table 1 value, and
+no published constant was touched. They have **not** been sensitivity-swept.
+
+### 11.3 Correction to the earlier diagnosis
+
+The previously recorded diagnosis — that `kInitialPrice = 1.0` sat at roughly
+double its own price cap and that this was a calibration problem — was an
+**averaging artifact**. "Mean wage 16.3" was 67 zeros averaged with 33
+healthy firms at ~53; "price 2.3× its cap" was mostly zombie firms whose cap
+is zero by construction. The proposed remedy was also directionally wrong:
+lowering `kInitialPrice` raises real balances and worsens excess demand.
+Setting `kInitialWage = 58` (tested) moved the criteria by nothing, because
+initial conditions do not survive the 1000-month burn-in.
+
+Likewise, the chronic vacancy glut (~58 of 100 firms) and the excess of
+aggregate demand over productive capacity were **symptoms**, not causes:
+both follow from zombie firms distributing 100% of revenue as profit.
+
+Methodological lesson, recorded because it cost two diagnostic cycles:
+**check per-firm distributions before trusting an aggregate.** A mean over a
+bimodal population describes neither mode.
+
+### 11.4 Demand dynamics (measured)
+
+`Metrics` now records `demand`, `planned_consumption`, `inventory` and
+`household_liquidity`. Post-burn-in, over 6000 months:
+
+| Series | Mean | Coefficient of variation |
+|---|---|---|
+| `planned_consumption` (units households intend to buy) | 63,335 | **4.3%** |
+| `demand` (units firms are asked for) | 81,720 | **26.6%** |
+| `inventory` | 21,091 | 90.7% |
+| `household_liquidity` | 94,790 | 0.4% |
+| monthly capacity (λ × employed × 21) | 61,908 | 2.9% |
+
+Two things follow. First, **household demand is stable and very close to
+productive capacity** (63.3k planned vs 61.9k capacity, CV 4.3%) — the
+demand side is not the volatile part of this economy. Second, the gap
+between `planned_consumption` and `demand` is search friction, not want:
+a household turned away restocks its visit elsewhere, and *each* firm
+records the full amount wanted, so a single underlying want is counted
+several times. `demand`'s 26.6% CV is therefore largely a **stockout
+amplifier** — it rises when goods are scarce and falls when they are
+plentiful (corr(`demand`, `inventory`) = −0.77). This is the mechanism
+described in §5.2 working as designed, and it is why `demand/capacity` reads
+1.32 while `planned_consumption/capacity` reads ≈1.02.
+
+Critically, `inventory` is now non-zero in **6000 of 6000 months** (it was
+structurally pinned at zero before the fix). Firms can hold stock, which is
+the precondition for the price-cut and layoff branches to fire at all.
+
+### 11.5 The cycle
+
+Cross-correlation against unemployment (negative lag = series leads):
+
+| Series | Peak correlation | At lag |
+|---|---|---|
+| `planned_consumption` | −0.79 | −12 months |
+| `inventory` | +0.90 | −5 months |
+| `vacancies` | −0.85 | +1 month |
+| `mean_wage` | +0.62 | −17 months |
+
+Searched over ±24 months. An earlier version of this table searched only ±9
+and therefore reported local extrema as peaks; the `mean_wage` row is the one
+that materially changes. The strongest wage relation is **positive and
+leading** — wages are high about 17 months *before* unemployment peaks, which
+reads as the boom bidding wages up until the squeeze arrives. The
+Phillips-type negative relation is real but secondary, appearing as −0.52
+around +9 months. Note the cycle is roughly 55 months long, so a −17 lead and
+a +38 lag are the same alignment; treat the sign as informative and the exact
+lag as approximate.
+
+This is a coherent business cycle: consumption softens, inventory accumulates
+about seven months later, firms respond by cutting vacancies and firing,
+unemployment peaks, and wages fall afterwards. Falling wages and prices then
+raise real balances (M/p), demand recovers, inventory drains, and hiring
+resumes. The Phillips relation (criterion 2) shows up as the negative wage
+correlation at positive lags rather than as a contemporaneous one.
+
+Criteria 2 and 3 strengthened substantially (−0.111 → −0.445 and −0.339 →
+−0.842). Unlike the previous fix wave, this is not attributable to noise
+correlation: unemployment's range widened from 0–2.7% to 0–12.6%, so the
+relationships are now measured over an informative span.
+
+### 11.6 Why the mean is 1.7% and the peak 12.6%
+
+Lengnick reports unemployment roughly 0-20% with a mean near 5%. This run
+gives 0-12.6%, mean 1.73%. The gap decomposes; it is not a mystery.
+
+**The mean is an accounting identity.** Unemployment is a stock fed by a
+flow, and the two measured quantities multiply out to the observed level:
+
+| Quantity | Measured |
+|---|---|
+| Fires per month (instrumented `network::fire`) | 33.2 |
+| Firms holding an open vacancy | 45.6 of 100 |
+| P(unemployed finds one in β=5 visits) = 1−(1−0.456)^5 | 95.2% |
+| Implied mean spell | ≈0.5 months |
+| **Implied unemployment** | 33.2 × 0.5 = 17 households = **1.7%** (observed 1.73%) |
+
+**Two plausible explanations were tested and rejected.** Both were tested
+rather than reasoned about, per §11.3's lesson:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Telescoped demand inflates inventory targets, so firms over-hire | record demand only on the day's first shop visit, removing all 25.7% duplication | mean 1.73% → 1.73%, **no effect** |
+| Job search too effective at β=5 | sweep β = 5, 3, 2, 1 | mean 1.62% → 2.10%, **nearly flat** |
+
+**The actual reason: v1 has no demand leakage.** It is a closed circular
+flow with a fixed money stock, no credit, no investment and no government.
+In steady state all income is spent and all spending is income, so aggregate
+demand is identically aggregate output — there is no channel by which demand
+can sit below capacity for a sustained period. The price level is the free
+variable and floats until real demand equals full-employment output:
+
+- planned consumption: **63,335** units/month
+- full-employment output: **63,000** units/month (1000 × 3 × 21)
+- implied labour requirement: **~1,005 workers** against a workforce of 1,000
+
+Hence 70 firm-months per month want to hire against 7 wanting to fire — a
+10:1 ratio. Unemployment in v1 is **frictional by construction**: the residue
+of firms and workers not finding each other within a month, never deficient
+demand. A 5% mean requires demand to fall below capacity and stay there, and
+nothing in v1 can produce that.
+
+**The peak is capped by the layoff throttle.** A firm may fire at most one
+worker per month (§5.1, faithful to the paper). Instrumented at the decision
+point:
+
+| When a firm wants to… | Mean workers it wants to move | Share needing >1 |
+|---|---|---|
+| fire | 4.61 | 47.7% |
+| hire | 2.53 | 37.0% |
+
+Nearly half of all firing decisions are throttled, the typical one about
+fourfold. With the one-month firing lag on top, a contraction that "wants"
+to shed 300 workers bleeds them out over many months while hiring elsewhere
+refills the pool. Note this constraint is **faithful** — Lengnick operates
+under it too — so it explains this run's ceiling, not the gap to his numbers.
+
+**Conjecture, untested.** Because unemployment is floored at zero, a higher
+mean and a wider range are the same question: a more volatile series has a
+higher mean. The most likely route to both is a demand leakage — credit,
+saving not immediately respent, or investment — letting aggregate demand
+fall below capacity. That is extension 7 (the bank module) in §8. This is a
+hypothesis about where to look, not a finding.
+
+### 11.7 Still open
+
+- `kMaxEmergencyWageCut` and `kMinWage` are unswept invented constants.
+- Matching Lengnick's amplitude, per §11.6 — most likely needs a demand
+  leakage, i.e. the credit/bank extension.
+- The deferred items listed in `CLAUDE.md` are unchanged.
