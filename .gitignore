@@ -1,0 +1,20 @@
+# Build
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.a
+*.so
+
+# Simulation output
+output/
+*.csv
+*.bin
+
+# Editor / OS
+.cache/
+compile_commands.json
+.vscode/
+.idea/
+*.swp
