@@ -10,6 +10,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 
 add_library(economy_core
     src/rng.cpp
+    src/world.cpp
 )
 target_include_directories(economy_core PUBLIC src)
 
@@ -17,6 +18,7 @@ enable_testing()
 add_executable(economy_tests
     tests/test_main.cpp
     tests/test_rng.cpp
+    tests/test_world.cpp
 )
 target_link_libraries(economy_tests PRIVATE economy_core)
 target_include_directories(economy_tests PRIVATE third_party)
