@@ -235,3 +235,31 @@ TEST_CASE("inventory exactly at upper band edge does not mark firing") {
 
     CHECK(f.pending_fire == NO_HOUSEHOLD);
 }
+
+TEST_CASE("inventory exactly at lower band edge does not adjust price") {
+    Rng rng(1);
+    Firm f;
+    f.wage = 63.0;
+    f.demand_last_month = 100.0;
+    double lower = params::kInventoryLowerFactor * 100.0;
+    f.inventory = lower;  // exactly at the edge: not < lower, so no raise
+    f.price = 5.0;
+
+    firm_decisions::adjust_price(f, rng);
+
+    CHECK(f.price == doctest::Approx(5.0));
+}
+
+TEST_CASE("inventory exactly at upper band edge does not adjust price") {
+    Rng rng(1);
+    Firm f;
+    f.wage = 63.0;
+    f.demand_last_month = 100.0;
+    double upper = params::kInventoryUpperFactor * 100.0;
+    f.inventory = upper;  // exactly at the edge: not > upper, so no cut
+    f.price = 5.0;
+
+    firm_decisions::adjust_price(f, rng);
+
+    CHECK(f.price == doctest::Approx(5.0));
+}
