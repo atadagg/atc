@@ -4,6 +4,7 @@
 #include "world.hpp"
 #include "params.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -145,7 +146,7 @@ TEST_CASE("precision retention for high-precision values") {
         m.total_production = 100.0;
         m.vacancies = 0;
         m.gini = 0.5;
-        m.total_money = 100000.000000123;  // High precision value
+        m.total_money = 123456.789012345;  // Value where truncation error is unmistakable
         rec.record(m);
     }
 
@@ -168,13 +169,14 @@ TEST_CASE("precision retention for high-precision values") {
        >> mean_wage >> comma >> total_production >> comma >> vacancies >> comma
        >> gini >> comma >> total_money;
 
-    // The precision should be close to the original, within 1e-9
-    CHECK(total_money == doctest::Approx(100000.000000123).epsilon(1e-9));
+    // Assert on absolute difference: at 6 significant digits, 123456.789012345 becomes 123457 (error ~0.211)
+    // With setprecision(15), this passes comfortably. Without it, fails by five orders of magnitude.
+    const double expected = 123456.789012345;
+    CHECK(std::abs(total_money - expected) < 1e-6);
 
     std::remove(path.c_str());
 }
 
 TEST_CASE("csv recorder throws when output directory does not exist") {
-    const std::string path = "no_such_dir_xyz/out.csv";
-    CHECK_THROWS_AS([](){ CsvRecorder("no_such_dir_xyz/out.csv"); }(), std::runtime_error);
+    CHECK_THROWS_AS([]{ CsvRecorder("no_such_dir_xyz/out.csv"); }(), std::runtime_error);
 }
