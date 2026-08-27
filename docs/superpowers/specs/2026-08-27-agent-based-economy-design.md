@@ -367,49 +367,65 @@ order; each attaches at a named module.
 
 ---
 
-## 11. v1 results (2026-08-27)
+## 11. v1 results (2026-08-27, re-measured after the fix wave)
 
 Measured with `./build/economy --seed 1 --burn-in 1000 --months 6000 --out
 output/run.csv` (1000 households, 100 firms, unmodified Table 1 calibration,
 no exogenous shocks) and `scripts/validate.py` (Python stdlib only —
 matplotlib/pandas are unavailable in this environment; `scripts/plot.py` is
-kept as written but unexecuted). Runtime: ~9.1s for the full 7000-month run.
-Money conservation: drift `-1.0e-9`, spread over the whole run
-`2.0e-9` — the master invariant holds throughout.
+kept as written but unexecuted). Runtime: ~14s for the full 7000-month run.
+Money conservation: drift `+3.0e-9`, spread over the whole run
+`4.0e-9` — the master invariant holds throughout.
 
-Determinism and burn-in independence both hold: identical seeds byte-for-byte
-reproduce a run, and the `Rng`-seeded network-independence test (300-month
-warm-up, differing only in the initial random network) gives mean
-unemployment of 1.00% vs. 0.95% for two different network seeds under the
-same dynamics seed — well within the test's 15-point tolerance, though both
-values are consistent with the same near-zero equilibrium described below.
+**These numbers supersede the ones originally recorded in this section.**
+The shopping-retry fix (redrawing a shop slot with replacement, up to 7
+times a day, was changed to a random permutation visiting each of the 7
+connected shops at most once) changes simulation output, so a full re-run
+was required. Determinism and burn-in independence both still hold:
+identical seeds byte-for-byte reproduce a run, and the `Rng`-seeded
+network-independence test (300-month warm-up, differing only in the initial
+random network) now gives mean unemployment of 0.933% vs. 0.705% for two
+different network seeds under the same dynamics seed — a 0.228pp gap, well
+inside the test's now-tightened 1pp tolerance (previously 15pp, which no
+plausible dependence could have tripped).
 
-| # | Criterion | Measured | Verdict |
-|---|---|---|---|
-| 1 | Endogenous unemployment fluctuation | mean 0.86%, sd 0.45pp, range [0.0%, 2.8%]; lag-1 autocorrelation 0.92 decaying to ~0 by lag 12 (mean-reverting noise, not a boom/bust cycle) | **FAIL (in substance)** |
-| 2 | Phillips curve (unemployment vs. wage inflation) | correlation −0.103 | PASS (weak) |
-| 3 | Beveridge curve (unemployment vs. vacancies) | correlation −0.237 | PASS |
-| 4 | Wealth dispersion (Gini of household liquidity) | mean 0.025, range [0.011, 0.054] across the run, first-decile mean 0.031 vs. last-decile mean 0.021 | PASS |
+| # | Criterion | Measured (before fix wave) | Measured (after fix wave) | Verdict |
+|---|---|---|---|---|
+| 1 | Endogenous unemployment fluctuation | mean 0.86%, sd 0.45pp, range [0.0%, 2.8%] | mean 0.80%, sd 0.44pp, range [0.0%, 2.7%]; lag-1 autocorrelation 0.92 decaying to ≈0 by lag 12 (mean-reverting noise, not a boom/bust cycle) | **FAIL (in substance)** |
+| 2 | Phillips curve (unemployment vs. wage inflation) | correlation −0.103 | correlation −0.111 | PASS (weak) |
+| 3 | Beveridge curve (unemployment vs. vacancies) | correlation −0.237 | correlation −0.339 | PASS |
+| 4 | Wealth dispersion (Gini of household liquidity) | mean 0.025, range [0.011, 0.054] | mean 0.0265, range [0.0112, 0.0502], first-decile (first 600 months) mean 0.0317 vs. last-decile (last 600 months) mean 0.0223 | PASS |
 
-**Criterion 1 in detail.** Unemployment is *not* pinned at literal zero — it
-moves, sd > 0 is technically satisfied, and only 0.5% of post-burn-in months
-show exactly 0%. But the entire post-burn-in run stays confined to a
-0.0–2.8% band around a 0.86% mean, with autocorrelation that decays to noise
-within about a year — i.e. small mean-reverting fluctuation, not the
-multi-percent boom/bust cycling (Lengnick reports unemployment ranging
-roughly 0–20% with a mean around 5%) the criterion is meant to detect.
-Vacancies stay chronically high (mean ~55 of 100 firms unfilled) at the same
-time, which is the tell: an unemployed household's job search (`β=5` random
-firm visits against a ~55% vacancy rate) finds and accepts an open position
-almost every month it's out of work, so unemployment cannot accumulate long
-enough to swing. Every rule inspected — `firm_decisions::adjust_workforce`,
+Mean open vacancies: 57.4 of 100 firms before the fix wave, **58.1** after —
+essentially unchanged. This is the clearest single indicator that Fix 2 (the
+shopping-retry fix) moved the *numbers* without moving the *dynamics*: it
+tightened up which firm absorbs a given day's demand, but did not relieve
+the chronic vacancy glut that is the real driver of criterion 1's verdict.
+
+**Criterion 1 in detail (verdict unchanged from before the fix wave).**
+Unemployment is *not* pinned at literal zero — it moves, sd > 0 is
+technically satisfied, and only 1.1% of post-burn-in months show exactly
+0%. But the entire post-burn-in run stays confined to a 0.0–2.7% band around
+a 0.80% mean, with autocorrelation that decays to noise within about a year
+— i.e. small mean-reverting fluctuation, not the multi-percent boom/bust
+cycling (Lengnick reports unemployment ranging roughly 0–20% with a mean
+around 5%) the criterion is meant to detect. Vacancies stay chronically high
+(mean ~58 of 100 firms unfilled) at the same time, which is the tell: an
+unemployed household's job search (`β=5` random firm visits against a ~58%
+vacancy rate) finds and accepts an open position almost every month it's out
+of work, so unemployment cannot accumulate long enough to swing. Every rule
+inspected — `firm_decisions::adjust_workforce`,
 `household_decisions::search_job`, `network::hire`/`fire`,
 `month_close::apply_pending_fires` — matches the spec's §5 text and the
 plan's calibration table verbatim; the "Known ambiguity" household-φ note
 was already followed correctly (no such parameter exists in the code). No
-implementation bug was found in the diagnosis order the plan specifies. This
-is reported as a genuine finding, not patched: the mismatch between this
-run's near-full-employment equilibrium and Lengnick's published cyclical
+implementation bug was found in the diagnosis order the plan specifies, and
+the shopping-retry fix (Fix 2 of the pre-merge review) — while a genuine
+correctness fix on its own terms — did not change this picture: vacancies
+are essentially unchanged (57.4 → 58.1) and unemployment's range and
+autocorrelation structure are essentially unchanged. This is reported as a
+genuine finding, not patched: the mismatch between this run's
+near-full-employment equilibrium and Lengnick's published cyclical
 unemployment is most likely either a subtler calibration/behavioral gap
 still to be located, or a feature of Lengnick's model not fully captured by
 this reading of the paper — not something to fix by adjusting Table 1
@@ -417,5 +433,10 @@ constants.
 
 Criteria 2–4 pass on their stated numeric thresholds, though 2 and 3 are
 correlated with (and plausibly weakened by) criterion 1's muted amplitude:
-a Phillips/Beveridge relationship measured over a 0–2.8% unemployment range
-is a much weaker test than one measured over 0–20%.
+a Phillips/Beveridge relationship measured over a 0–2.7% unemployment range
+is a much weaker test than one measured over 0–20%. Criterion 3's
+correlation strengthened from −0.237 to −0.339 after the fix wave; given
+that vacancies and unemployment's range are both essentially unchanged,
+this shift is attributed to the fix-wave changes altering month-to-month
+noise correlation rather than to any change in the underlying relationship,
+and is not treated as evidence of a stronger Beveridge relationship.
