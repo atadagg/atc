@@ -14,8 +14,8 @@ graphics dependency, linked into both the viewer and the existing test binary.
 Only the panels and the frame loop touch SDL/ImGui. `src/` is not modified.
 
 **Tech Stack:** C++23, CMake, SDL3 (system, `pkg-config sdl3`), Dear ImGui
-v1.92.9b-docking (vendored), ImPlot (vendored, phase C only), doctest (already
-vendored).
+v1.92.9b-docking (vendored), doctest (already vendored). No ImPlot — see
+task 7 for why the spec's documented fallback is where this starts.
 
 **Spec:** `docs/superpowers/specs/2026-08-28-economy-viewer-design.md`
 
@@ -43,7 +43,6 @@ vendored).
 | `viewer/sim.{hpp,cpp}` | `Sim`: owns `World` + `Rng` + month counter; `step()`, `snapshot()`, `restore()`, `seek()`. No graphics. |
 | `viewer/ring_recorder.{hpp,cpp}` | `RingRecorder : Recorder` — last N `Metrics` in a fixed ring. No graphics. |
 | `viewer/histogram.{hpp,cpp}` | `bin()` over a span of doubles. No graphics. |
-| `viewer/agent_history.{hpp,cpp}` | Fixed ring of per-agent fields for sparklines. No graphics. |
 | `viewer/app.{hpp,cpp}` | Viewer state: a `Sim`, the recorders, selection, filters, playback speed. No graphics. |
 | `viewer/main.cpp` | SDL3 window, ImGui frame loop, tick pacing, panel dispatch. |
 | `viewer/panel_agents.cpp` | Phase B: firm/household tables + detail panel. |
@@ -52,10 +51,10 @@ vendored).
 | `tests/test_viewer_sim.cpp` | Snapshot round-trip / seek exactness. |
 | `tests/test_viewer_ring.cpp` | `RingRecorder`. |
 | `tests/test_viewer_histogram.cpp` | Binning edge cases. |
-| `third_party/imgui/`, `third_party/implot/` | Vendored, beside `doctest.h`. |
+| `third_party/imgui/` | Vendored, beside `doctest.h`. |
 
-`viewer_core` (CMake library) = `sim`, `ring_recorder`, `histogram`,
-`agent_history`, `app`. It links `economy_core` and nothing else.
+`viewer_core` (CMake library) = `sim`, `ring_recorder`, `histogram`, `app`.
+It links `economy_core` and nothing else.
 
 ---
 
