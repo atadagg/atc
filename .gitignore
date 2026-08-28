@@ -25,3 +25,6 @@ compile_commands.json
 
 # Python bytecode from scripts/ importing across modules.
 __pycache__/
+
+# ImGui window-layout state, written next to wherever economy_viewer runs.
+imgui.ini
