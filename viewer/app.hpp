@@ -18,6 +18,13 @@ struct App {
     bool paused = true;
     int months_per_frame = 1;
 
+    // The furthest month the simulation has ever reached. Distinct from
+    // sim.month(), which is whatever month is currently displayed and can
+    // move backward on a seek. The scrub bar's upper bound is this, not
+    // sim.month() -- otherwise one backward seek would shrink the slider's
+    // own maximum and the run could never be scrubbed forward again.
+    int max_month = 0;
+
     uint32_t selected_firm = NO_FIRM;
     uint32_t selected_household = NO_HOUSEHOLD;
 
@@ -33,6 +40,12 @@ struct App {
 
     // Steps the simulation if running, recording each month's metrics.
     void advance();
+
+    // Moves the displayed state to `month`. The metrics ring is cleared
+    // because its contents describe months that are no longer the ones being
+    // shown; it refills as the run continues. Does not touch max_month --
+    // seeking never extends how far the run has actually reached.
+    void seek_to(int month);
 };
 
 void draw_agents_panel(App& app);

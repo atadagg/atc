@@ -71,6 +71,28 @@ at all, and prints every number the success criteria need. Its `load` and
 imports them, so the page and the terminal cannot drift. Add a criterion there,
 not in two places.
 
+### Viewer
+
+```bash
+cmake -S . -B build && cmake --build build -j   # builds economy_viewer if SDL3 is present
+./build/economy_viewer
+```
+
+A live SDL3 + ImGui front-end (ImGui vendored at `third_party/imgui/`,
+`-w` on that target only — it does not have to satisfy our warning settings).
+The viewer owns the `World` and ticks it in its own frame loop, one frame at
+a time, rather than driving `main.cpp`'s CLI path. Scrubbing backward is
+exact re-simulation from the nearest retained snapshot (every 50 months),
+never interpolation — the same determinism (invariant 2) that makes a run
+reproducible from a seed is what makes a scrubbed-to month byte-identical to
+having run straight there. Testable viewer logic — `Sim`'s snapshot/seek,
+`RingRecorder`, histogram binning — lives in `viewer_core`, separate from the
+ImGui panels, and is covered by `tests/test_viewer_*.cpp`. Steering (live
+parameter mutation from the UI) is deliberately not implemented: `params.hpp`
+is `constexpr`, and mutating simulation parameters mid-run needs its own
+answer for determinism (an intervention log, most likely) before it can be
+built without quietly breaking invariant 2.
+
 ## Architecture
 
 | File | Responsibility |
