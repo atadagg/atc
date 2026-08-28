@@ -117,15 +117,25 @@ void draw_household_table(App& app) {
     ImGui::TableSetupColumn("planned consumption");
     ImGui::TableHeadersRow();
 
-    // 1000 rows: let ImGui skip the off-screen ones rather than formatting
-    // text for all of them every frame.
+    // Filter first, then clip over the filtered index vector -- ImGuiListClipper
+    // sizes the scroll area from item_count x row_height, so skipping rows
+    // inside the loop (rather than shrinking item_count up front) desyncs the
+    // scrollbar from what actually renders.
+    std::vector<uint32_t> rows;
+    rows.reserve(households.size());
+    for (uint32_t i = 0; i < households.size(); ++i) {
+        if (app.filters.unemployed && households[i].employed()) continue;
+        rows.push_back(i);
+    }
+
+    // Let ImGui skip the off-screen ones rather than formatting text for all
+    // of them every frame.
     ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(households.size()));
+    clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
         for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
-            const uint32_t i = static_cast<uint32_t>(row);
+            const uint32_t i = rows[static_cast<size_t>(row)];
             const Household& h = households[i];
-            if (app.filters.unemployed && h.employed()) continue;
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             char label[16];
