@@ -67,15 +67,20 @@ std::vector<double> firm_field(const World& w, int which) {
 void draw_dist_panel(App& app) {
     static int bins = 20;
     ImGui::Begin("distributions");
-    ImGui::SliderInt("bins", &bins, 4, 60);
+    ImGui::SliderInt("bins", &bins, 4, 60, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::TextDisabled("click a firm bin to pin those firms in the agents panel");
 
+    // Defensive floor: Ctrl+Click text entry is clamped by AlwaysClamp above, but
+    // bin() throws std::invalid_argument for bins < 1 with nothing in main.cpp's
+    // render loop to catch it, so re-assert the precondition here too.
+    const int effective_bins = bins < 1 ? 1 : bins;
+
     const World& w = app.sim.world();
-    draw_one(app, "firm wage", firm_field(w, 0), bins, true);
-    draw_one(app, "firm price", firm_field(w, 1), bins, true);
-    draw_one(app, "firm inventory", firm_field(w, 2), bins, true);
-    draw_one(app, "firm headcount", firm_field(w, 3), bins, true);
-    draw_one(app, "firm liquidity", firm_field(w, 4), bins, true);
+    draw_one(app, "firm wage", firm_field(w, 0), effective_bins, true);
+    draw_one(app, "firm price", firm_field(w, 1), effective_bins, true);
+    draw_one(app, "firm inventory", firm_field(w, 2), effective_bins, true);
+    draw_one(app, "firm headcount", firm_field(w, 3), effective_bins, true);
+    draw_one(app, "firm liquidity", firm_field(w, 4), effective_bins, true);
 
     std::vector<double> hl;
     std::vector<double> rw;
@@ -85,8 +90,8 @@ void draw_dist_panel(App& app) {
         hl.push_back(h.liquidity);
         rw.push_back(h.reservation_wage);
     }
-    draw_one(app, "household liquidity", hl, bins, false);
-    draw_one(app, "household reservation wage", rw, bins, false);
+    draw_one(app, "household liquidity", hl, effective_bins, false);
+    draw_one(app, "household reservation wage", rw, effective_bins, false);
 
     ImGui::End();
 }
