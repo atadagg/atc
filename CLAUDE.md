@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 95 cases
+./build/economy_tests                              # 111 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 ```
@@ -178,7 +178,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 95 tests, 196,090 assertions.
+v1 complete and merged. 111 tests, 196,738 assertions.
 
 **All four success criteria pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4).
