@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "agents.hpp"
 #include "ring_recorder.hpp"
@@ -19,6 +20,16 @@ struct App {
 
     uint32_t selected_firm = NO_FIRM;
     uint32_t selected_household = NO_HOUSEHOLD;
+
+    struct Filters {
+        bool wage_at_floor = false;
+        bool vacancy_open = false;
+        bool inventory_zero = false;
+        bool unemployed = false;
+        // Non-empty means: show only these firms. Written by a histogram
+        // bin click, cleared by the "clear" button.
+        std::vector<uint32_t> pinned_firms;
+    } filters;
 
     // Steps the simulation if running, recording each month's metrics.
     void advance();
