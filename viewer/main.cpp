@@ -20,6 +20,15 @@ int main(int, char**) {
         return 1;
     }
 
+    // Vsync caps the render loop at the display refresh rate. Without it the
+    // loop spins as fast as the GPU allows, and `months_per_frame` paces the
+    // simulation against that unbounded frame rate rather than ~60 Hz. Not
+    // fatal if unavailable (e.g. headless/software rendering) — the viewer
+    // just free-runs in that case, so don't abort startup over it.
+    if (!SDL_SetRenderVSync(renderer, 1)) {
+        std::fprintf(stderr, "SDL_SetRenderVSync failed: %s\n", SDL_GetError());
+    }
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
