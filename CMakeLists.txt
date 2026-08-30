@@ -26,6 +26,7 @@ add_library(economy_core
 target_include_directories(economy_core PUBLIC src)
 
 add_library(viewer_core
+    viewer/cell.cpp
     viewer/sim.cpp
     viewer/ring_recorder.cpp
     viewer/histogram.cpp
@@ -48,6 +49,7 @@ add_executable(economy_tests
     tests/test_viewer_sim.cpp
     tests/test_viewer_ring.cpp
     tests/test_viewer_histogram.cpp
+    tests/test_viewer_cell.cpp
 )
 target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
 target_include_directories(economy_tests PRIVATE third_party)
