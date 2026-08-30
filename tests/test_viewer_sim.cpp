@@ -85,10 +85,10 @@ TEST_CASE("seeking forward is the same as stepping forward") {
 
 TEST_CASE("money is conserved across a seek") {
     Sim s(1);
-    const double start = s.world().total_money();
+    const double start = s.world().books_balance();
     s.step(300);
     s.seek(100);
-    CHECK(s.world().total_money() == doctest::Approx(start).epsilon(1e-12));
+    CHECK(s.world().books_balance() == doctest::Approx(start).epsilon(1e-12));
 }
 
 TEST_CASE("parameters travel with a snapshot") {

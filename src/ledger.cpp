@@ -7,14 +7,24 @@ namespace ledger {
 namespace {
 
 double& liquidity_of(World& w, Account a) {
-    if (a.kind == Kind::Firm) {
-        if (a.index >= w.firms.size()) throw std::out_of_range("ledger::transfer: no such firm");
-        return w.firms[a.index].liquidity;
+    switch (a.kind) {
+        case Kind::Firm:
+            if (a.index >= w.firms.size()) {
+                throw std::out_of_range("ledger::transfer: no such firm");
+            }
+            return w.firms[a.index].liquidity;
+        case Kind::Household:
+            if (a.index >= w.households.size()) {
+                throw std::out_of_range("ledger::transfer: no such household");
+            }
+            return w.households[a.index].liquidity;
+        case Kind::Issuer:
+            break;
     }
-    if (a.index >= w.households.size()) {
-        throw std::out_of_range("ledger::transfer: no such household");
+    if (a.index >= w.issuers.size()) {
+        throw std::out_of_range("ledger::transfer: no such issuer");
     }
-    return w.households[a.index].liquidity;
+    return w.issuers[a.index];
 }
 
 }  // namespace
@@ -26,6 +36,9 @@ void transfer(World& w, Account from, Account to, double amount, Reason reason,
     }
     double& src = liquidity_of(w, from);
     double& dst = liquidity_of(w, to);
+    if (!may_issue(from.kind) && src < amount) {
+        throw Overdraft("ledger::transfer: a non-issuer cannot be overdrawn");
+    }
     src -= amount;
     dst += amount;
     if (journal) journal->record(from, to, amount, reason);

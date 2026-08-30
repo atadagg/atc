@@ -25,9 +25,10 @@ TEST_CASE("transfer debits the source and credits the sink") {
 TEST_CASE("transfer conserves total money") {
     Rng rng(2);
     World w = tiny_world(rng);
-    double before = w.total_money();
+    w.firms[0].liquidity = 50.0;
+    double before = w.books_balance();
     ledger::transfer(w, ledger::firm(0), ledger::household(3), 17.5);
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("transfer works between two accounts of the same kind") {
@@ -160,4 +161,68 @@ TEST_CASE("a rejected transfer records nothing") {
     CHECK_THROWS(ledger::transfer(w, ledger::household(99), ledger::firm(0), 1.0,
                                   ledger::Reason::Purchase, &j));
     CHECK(j.entries.empty());
+}
+
+// --- issuers and solvency -------------------------------------------------
+//
+// The engine's rule is that every event balances, NOT that the total never
+// changes. Money is created by issuance -- a balanced movement out of an
+// account that is allowed to go negative -- and an issuer's negative balance
+// is the money it has issued, not a deficit.
+
+TEST_CASE("only issuer kinds may issue") {
+    static_assert(!ledger::may_issue(ledger::Kind::Firm));
+    static_assert(!ledger::may_issue(ledger::Kind::Household));
+    static_assert(ledger::may_issue(ledger::Kind::Issuer));
+    CHECK(true);
+}
+
+TEST_CASE("a non-issuer cannot be pushed below zero") {
+    Rng rng(20);
+    World w = tiny_world(rng);
+    w.households[0].liquidity = 10.0;
+    CHECK_THROWS_AS(ledger::transfer(w, ledger::household(0), ledger::firm(0), 10.5),
+                    ledger::Overdraft);
+    // The rejected transfer moved nothing.
+    CHECK(w.households[0].liquidity == doctest::Approx(10.0));
+}
+
+TEST_CASE("a non-issuer may be emptied exactly") {
+    Rng rng(21);
+    World w = tiny_world(rng);
+    w.households[0].liquidity = 10.0;
+    ledger::transfer(w, ledger::household(0), ledger::firm(0), 10.0);
+    CHECK(w.households[0].liquidity == 0.0);
+}
+
+TEST_CASE("an issuer may go negative -- that is the money it has issued") {
+    Rng rng(22);
+    World w = tiny_world(rng);
+    w.issuers.resize(1, 0.0);
+
+    ledger::transfer(w, ledger::issuer(0), ledger::household(0), 500.0);
+
+    CHECK(w.issuers[0] == doctest::Approx(-500.0));
+}
+
+TEST_CASE("issuance raises circulation but leaves the books balanced") {
+    Rng rng(23);
+    World w = tiny_world(rng);
+    w.issuers.resize(1, 0.0);
+
+    const double circulation_before = w.money_in_circulation();
+    const double books_before = w.books_balance();
+
+    ledger::transfer(w, ledger::issuer(0), ledger::household(1), 250.0);
+
+    CHECK(w.money_in_circulation() == doctest::Approx(circulation_before + 250.0));
+    CHECK(w.books_balance() == doctest::Approx(books_before));
+}
+
+TEST_CASE("circulation excludes issuers, books include them") {
+    Rng rng(24);
+    World w = tiny_world(rng);
+    w.issuers.resize(1, -400.0);
+    CHECK(w.books_balance() ==
+          doctest::Approx(w.money_in_circulation() - 400.0));
 }

@@ -55,7 +55,7 @@ TEST_CASE("total money is the sum of all liquidity") {
     World w(params::kNumHouseholds, params::kNumFirms, rng);
     double expected = params::kNumHouseholds * params::kInitialHouseholdLiquidity
                     + params::kNumFirms * params::kInitialFirmLiquidity;
-    CHECK(w.total_money() == doctest::Approx(expected));
+    CHECK(w.books_balance() == doctest::Approx(expected));
 }
 
 TEST_CASE("small world (fewer firms than shops) completes and is valid") {

@@ -18,6 +18,9 @@ struct Metrics {
     double daily_capacity = 0.0;
     int vacancies = 0;
     double gini = 0.0;
+    // Money in circulation: what non-issuer accounts hold. Identical to the
+    // books total while the model has no issuers, which Lengnick v1 does not.
+    // The CSV column keeps the name `total_money` -- scripts/ read it.
     double total_money = 0.0;
 
     // Demand side, all in goods units for the month just closed. `demand` is

@@ -11,10 +11,10 @@ TEST_CASE("wages move money from firms to their employees") {
     for (auto& f : w.firms) { f.wage = 10.0; f.liquidity = 1000.0; }
     for (auto& h : w.households) h.liquidity = 0.0;
 
-    double before = w.total_money();
+    double before = w.books_balance();
     month_close::pay_wages(w);
 
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
     for (const auto& h : w.households) {
         if (h.employed()) CHECK(h.liquidity == doctest::Approx(10.0));
     }
@@ -29,12 +29,12 @@ TEST_CASE("an unaffordable wage bill triggers a wage cut rather than bankruptcy"
     size_t n = f.employees.size();
     REQUIRE(n > 0);
 
-    double before = w.total_money();
+    double before = w.books_balance();
     month_close::pay_wages(w);
 
     CHECK(f.wage < 1000.0);
     CHECK(f.liquidity >= -1e-9);
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("profits are distributed in proportion to household liquidity") {
@@ -45,14 +45,14 @@ TEST_CASE("profits are distributed in proportion to household liquidity") {
     w.households[0].liquidity = 100.0;
     w.households[1].liquidity = 200.0;
 
-    double before = w.total_money();
+    double before = w.books_balance();
     month_close::distribute_profits(w);
 
     // Buffer is chi * wage bill = 0, so all 300 is distributed 1:2.
     CHECK(w.households[0].liquidity == doctest::Approx(200.0));
     CHECK(w.households[1].liquidity == doctest::Approx(400.0));
     CHECK(w.firms[0].liquidity == doctest::Approx(0.0));
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("profit distribution across multiple firms does not create money") {
@@ -83,7 +83,7 @@ TEST_CASE("profit distribution across multiple firms does not create money") {
     w.firms[1].liquidity = 60.0;
     w.firms[2].liquidity = 90.0;
 
-    double before = w.total_money();
+    double before = w.books_balance();
     CHECK(before == doctest::Approx(100.0 + 200.0 + 300.0 + 30.0 + 60.0 + 90.0));
 
     month_close::distribute_profits(w);
@@ -97,7 +97,7 @@ TEST_CASE("profit distribution across multiple firms does not create money") {
 
     for (const auto& f : w.firms) CHECK(f.liquidity == doctest::Approx(0.0));
 
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("a firm retains its buffer before distributing profit") {
@@ -119,12 +119,12 @@ TEST_CASE("a firm below its buffer distributes nothing") {
     Firm& f = w.firms[0];
     f.wage = 100.0;
     f.liquidity = 1.0;
-    double before = w.total_money();
+    double before = w.books_balance();
 
     month_close::distribute_profits(w);
 
     CHECK(f.liquidity == doctest::Approx(1.0));
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("reservation wage rises to match a higher income") {
@@ -182,9 +182,9 @@ TEST_CASE("a full month close conserves money") {
     Rng rng(1);
     World w(params::kNumHouseholds, params::kNumFirms, rng);
     for (auto& f : w.firms) { f.liquidity = 500.0; f.wage = 30.0; }
-    double before = w.total_money();
+    double before = w.books_balance();
     month_close::run(w);
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("an emergency wage cut is bounded and never reaches zero") {
@@ -220,4 +220,63 @@ TEST_CASE("repeated emergency cuts cannot drive a wage to zero") {
     // A zero wage collapses the price band to [0, 0], which permanently
     // disables the price-raise gate in firm_decisions::adjust_price.
     CHECK(firm_decisions::marginal_cost(f, w.params) > 0.0);
+}
+
+// --- distribution tails ---------------------------------------------------
+//
+// A firm splitting a pot among N recipients cannot pay N separately computed
+// shares: they need not sum to the pot, and the firm is left holding a
+// machine-epsilon residue -- 16,953 of them per reference run, measured. The
+// last recipient takes the exact remaining balance instead.
+
+TEST_CASE("a firm that cannot afford its payroll ends at exactly zero") {
+    Rng rng(1);
+    World w(20, 2, rng);
+    Firm& f = w.firms[0];
+    REQUIRE(f.employees.size() >= 2);
+    f.wage = 1000.0;          // far beyond what it holds
+    f.liquidity = 1.0 / 3.0;  // a pot that does not divide evenly
+    month_close::pay_wages(w);
+    CHECK(f.liquidity == 0.0);
+}
+
+TEST_CASE("a firm that can afford its payroll keeps exactly the difference") {
+    Rng rng(1);
+    World w(20, 2, rng);
+    Firm& f = w.firms[0];
+    const double headcount = static_cast<double>(f.employees.size());
+    REQUIRE(headcount >= 2);
+    f.wage = 1.0 / 7.0;
+    f.liquidity = 100.0;
+    const double expected = 100.0 - f.wage * headcount;
+    month_close::pay_wages(w);
+    CHECK(f.liquidity == doctest::Approx(expected));
+    CHECK(f.liquidity >= 0.0);
+}
+
+TEST_CASE("an empty firm distributes its entire balance and ends at zero") {
+    Rng rng(1);
+    World w(20, 2, rng);
+    Firm& f = w.firms[0];
+    // No employees means a zero wage bill, hence a zero retained buffer,
+    // hence a full payout -- the case where shares can overshoot the pot.
+    while (!f.employees.empty()) network::fire(w, f.employees.front());
+    REQUIRE(f.employees.empty());
+    f.liquidity = 1.0 / 3.0;
+    month_close::distribute_profits(w);
+    CHECK(f.liquidity == 0.0);
+}
+
+TEST_CASE("a staffed firm retains exactly its buffer") {
+    Rng rng(1);
+    World w(20, 2, rng);
+    Firm& f = w.firms[0];
+    REQUIRE(!f.employees.empty());
+    f.wage = 1.0 / 7.0;
+    f.liquidity = 500.0;
+    const double buffer =
+        w.params.buffer_factor * f.wage * static_cast<double>(f.employees.size());
+    month_close::distribute_profits(w);
+    CHECK(f.liquidity == doctest::Approx(buffer));
+    CHECK(f.liquidity >= 0.0);
 }

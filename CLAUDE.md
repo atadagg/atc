@@ -120,8 +120,8 @@ promoted ahead of the §8 extensions — see Next work, and
 |---|---|
 | `params.hpp` | Structural `constexpr` (layout, initial conditions, run config) vs. the behavioural `Params` struct that lives on `World`. Respect that boundary. |
 | `agents.hpp` | `Firm` and `Household` plain structs, `NO_FIRM`/`NO_HOUSEHOLD` sentinel |
-| `world.{hpp,cpp}` | Owns the agent arrays; `total_money()` |
-| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write `liquidity`; `Journal`, `Entry`, `Reason` |
+| `world.{hpp,cpp}` | Owns the agent arrays and the issuer accounts; `money_in_circulation()` (a measurement) and `books_balance()` (the assertion) |
+| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write a balance, and the only place solvency is enforced; `Kind`/`may_issue`, `Journal`, `Entry`, `Reason` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
 | `network.{hpp,cpp}` | Household↔firm links (employment, shop connections) |
 | `firm_decisions.{hpp,cpp}` | Monthly: wage, hire/fire, price |
@@ -174,6 +174,12 @@ Ordering is load-bearing and subtle:
    not write it into the engine, and do not assume it survives the bank
    extension. See `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`
    Part 2 for the issuer design and the solvency enforcement that goes with it.
+
+   Enforced, not merely documented: `transfer` rejects a movement that would
+   push a **non-issuer** below zero (`ledger::Overdraft`). A completed run is
+   therefore *proof* that no account went negative, rather than a run that was
+   not checked. Issuer accounts (`World::issuers`) may go negative freely —
+   that negative number is the money they have issued, and v1 has none.
 
    If the books ever fail to balance, it is the highest-priority bug; do not
    loosen a tolerance to hide it.
@@ -299,6 +305,53 @@ household, so it is O(firms x households) per month — 100 x 1000 — against
 
 That ratio is itself a finding: almost all recorded money movement in this
 economy is the ownership proxy, not trade.
+
+### Done: issuers and enforced solvency (Part 2 of the ledger spec)
+
+The engine no longer assumes a fixed money stock.
+
+- `Kind` gains `Issuer`; `may_issue(Kind)` is the single `constexpr` answer to
+  "which accounts may create money". Solvency is a property of the *kind*, not
+  a per-account flag, so the answer is one function rather than an audit.
+- `World::issuers` is a bare `std::vector<double>` — accounts with no agent
+  behind them. Empty in v1. A bank extension gives them behaviour; the
+  invariant needs only the balances.
+- `transfer` rejects a movement that would overdraw a non-issuer
+  (`ledger::Overdraft`). A rejected transfer moves nothing and journals
+  nothing.
+- `total_money()` split in two, and the distinction is the point:
+  `money_in_circulation()` (non-issuers — a **measurement**, it moves when
+  money is issued) and `books_balance()` (everything — an **assertion**, it
+  never moves). Identical today. The CSV column keeps the name `total_money`
+  because `scripts/` read it.
+
+**The distribution-tail fix, which had to come first.** Instrumentation
+measured **16,953** sub-zero balances per reference run — 5,838 via wages,
+11,115 via profits, worst −1.435e-12, none on households. Naive enforcement
+would have rejected all of them. Both loops now pay the **last** recipient the
+exact remaining balance rather than a separately computed share, so a firm
+lands on exactly `0.0` or exactly its buffer. This also removes the
+machine-epsilon residue introduced with the chokepoint.
+
+Why profits were the larger half: an empty firm has a zero wage bill, hence a
+zero buffer, hence distributes its *entire* balance — precisely the case where
+N computed shares overshoot the pot. ~16% of firms are empty in a given month.
+
+Results (seed 1, 6000 post-burn-in months), against the pre-Part-2 baseline:
+
+| | before | after |
+|---|---|---|
+| unemployment mean / sd | 0.0033 / 0.0040 | 0.0037 / 0.0046 |
+| Phillips | −0.444 | −0.459 |
+| Beveridge | −0.624 | −0.645 |
+| Gini mean | 0.0142 | 0.0151 |
+| books spread | 3e-9 | 3e-9 |
+| wall clock | 14.31 s avg | **13.67 s avg** |
+
+Same rounding-path story as the chokepoint commit: the trajectory moved, the
+economics did not. **Enforcement cost nothing measurable** — the run is if
+anything marginally faster, well inside the spec's 2% budget, despite a branch
+on all ~855M transfers. Determinism re-verified.
 
 ### Measured performance baseline
 
@@ -624,6 +677,12 @@ not by priority.
 
 Real but judged not worth fixing yet. Reconsider when touching that code.
 
+- The last share in a distribution (`f.liquidity - buffer`, or
+  `f.liquidity - target_balance`) could in principle round marginally negative
+  when the true final share is ~0, which `transfer` would reject as an invalid
+  amount. It did not occur once in 7000 months. Left unclamped deliberately: a
+  loud failure beats a silent `std::max(0.0, ...)` that would leave a firm
+  below its buffer and hide the arithmetic going wrong.
 - `network` has no bounds asserts on its index parameters.
 - `daily.cpp`'s cost clamp does not reduce `bought`, so at machine-epsilon
   scale a firm can ship marginally more than paid for. Conservation

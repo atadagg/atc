@@ -21,9 +21,9 @@ TEST_CASE("money is conserved across many months") {
     Rng rng(1);
     World w(params::kNumHouseholds, params::kNumFirms, rng);
     Scheduler s(w, rng);
-    double before = w.total_money();
+    double before = w.books_balance();
     for (int i = 0; i < 120; ++i) s.run_month();
-    CHECK(w.total_money() == doctest::Approx(before).epsilon(1e-9));
+    CHECK(w.books_balance() == doctest::Approx(before).epsilon(1e-9));
 }
 
 TEST_CASE("no liquidity ever goes negative") {
@@ -223,4 +223,15 @@ TEST_CASE("the journal can be attached and detached mid-run") {
     s.set_journal(nullptr);
     s.run_month();
     CHECK(j.entries.size() == after_one);
+}
+
+TEST_CASE("no balance goes negative over a run") {
+    Rng rng(1);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    Scheduler s(w, rng);
+    for (int m = 0; m < 60; ++m) {
+        s.run_month();
+        for (const auto& f : w.firms) REQUIRE(f.liquidity >= 0.0);
+        for (const auto& h : w.households) REQUIRE(h.liquidity >= 0.0);
+    }
 }

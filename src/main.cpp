@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     World world(params::kNumHouseholds, params::kNumFirms, rng);
     Scheduler scheduler(world, rng);
 
-    const double money_at_start = world.total_money();
+    const double money_at_start = world.books_balance();
 
     std::unique_ptr<CsvRecorder> recorder;
     try {
@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
         recorder->record(compute_metrics(world, m));
     }
 
-    const double money_at_end = world.total_money();
+    const double money_at_end = world.books_balance();
     std::println("money start={:.6f} end={:.6f} drift={:.9f}",
                  money_at_start, money_at_end, money_at_end - money_at_start);
 

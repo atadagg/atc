@@ -18,6 +18,11 @@ void pay_wages(World& w, ledger::Journal* journal) {
 
         double bill = f.wage * headcount;
         double per_worker = f.wage;
+        // What the firm should be holding once the payroll is paid. Computed
+        // up front so the last worker can be paid the exact remainder rather
+        // than a separately computed share -- see the distribution-tail note
+        // below.
+        double target_balance = f.liquidity - bill;
 
         // Lengnick 2013 §2.4: rather than allow bankruptcy, employees accept
         // a wage cut just large enough to keep the firm operating. This is
@@ -26,6 +31,7 @@ void pay_wages(World& w, ledger::Journal* journal) {
             // The firm still pays out everything it holds -- that part is the
             // paper's rule and is what conserves money here.
             per_worker = f.liquidity / headcount;
+            target_balance = 0.0;  // the firm pays out everything it holds
 
             // The posted wage, however, is floored. Cutting it all the way to
             // what this month happened to afford drives a persistently
@@ -39,13 +45,17 @@ void pay_wages(World& w, ledger::Journal* journal) {
             f.wage = std::max(per_worker, bounded);
         }
 
-        // Paid one worker at a time, through the chokepoint: headcount
-        // debits of per_worker rather than one debit of the aggregate bill.
-        // Those differ in the last bits, so the firm can be left holding a
-        // machine-epsilon residue instead of exactly zero. That is a rounding
-        // remainder, not unpaid wages, and no money is created or destroyed.
-        for (uint32_t h : f.employees) {
-            ledger::transfer(w, ledger::firm(fi), ledger::household(h), per_worker,
+        // Paid one worker at a time, through the chokepoint. `headcount`
+        // debits of `per_worker` need not sum to exactly `bill`, so the last
+        // worker is paid the difference between what the firm holds and what
+        // it should be left holding. Without this the firm keeps a
+        // machine-epsilon residue -- and when that residue is negative the
+        // solvency check rejects a payment that happens every month in a
+        // healthy run (measured: 5,838 times per reference run).
+        for (size_t i = 0; i < f.employees.size(); ++i) {
+            const bool last = (i + 1 == f.employees.size());
+            const double pay = last ? (f.liquidity - target_balance) : per_worker;
+            ledger::transfer(w, ledger::firm(fi), ledger::household(f.employees[i]), pay,
                              ledger::Reason::Wage, journal);
         }
     }
@@ -69,19 +79,25 @@ void distribute_profits(World& w, ledger::Journal* journal) {
         double profit = f.liquidity - buffer;
         if (profit <= 0.0) continue;
 
-        if (total_household_liquidity <= 0.0) {
-            // Degenerate case: split evenly rather than destroying money.
-            double share = profit / static_cast<double>(w.households.size());
-            for (uint32_t i = 0; i < w.households.size(); ++i) {
-                ledger::transfer(w, ledger::firm(fi), ledger::household(i), share,
-                                 ledger::Reason::Profit, journal);
+        // As in pay_wages: the last recipient takes the exact remainder, so
+        // the firm is left holding precisely its buffer. An empty firm has a
+        // zero wage bill, hence a zero buffer, hence pays out everything --
+        // which is the case where separately computed shares are most likely
+        // to overshoot the pot (measured: 11,115 times per reference run).
+        const double even_share = profit / static_cast<double>(w.households.size());
+        for (uint32_t i = 0; i < w.households.size(); ++i) {
+            const bool last = (i + 1 == w.households.size());
+            double share;
+            if (last) {
+                share = f.liquidity - buffer;
+            } else if (total_household_liquidity <= 0.0) {
+                // Degenerate case: split evenly rather than destroying money.
+                share = even_share;
+            } else {
+                share = profit * (initial_liquidity[i] / total_household_liquidity);
             }
-        } else {
-            for (uint32_t i = 0; i < w.households.size(); ++i) {
-                ledger::transfer(w, ledger::firm(fi), ledger::household(i),
-                                 profit * (initial_liquidity[i] / total_household_liquidity),
-                                 ledger::Reason::Profit, journal);
-            }
+            ledger::transfer(w, ledger::firm(fi), ledger::household(i), share,
+                             ledger::Reason::Profit, journal);
         }
     }
 }

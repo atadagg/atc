@@ -35,11 +35,11 @@ TEST_CASE("shopping moves money from household to firm and reduces inventory") {
     w.households[0].liquidity = 100.0;
     w.households[0].planned_consumption = 21.0;  // 1 unit per day
 
-    double money_before = w.total_money();
+    double money_before = w.books_balance();
     daily::shop(w, 0, rng);
 
     CHECK(w.households[0].liquidity == doctest::Approx(98.0));
-    CHECK(w.total_money() == doctest::Approx(money_before));
+    CHECK(w.books_balance() == doctest::Approx(money_before));
 
     double sold = 0.0;
     for (uint32_t s = 0; s < params::kShopsPerHousehold; ++s) {
@@ -112,7 +112,7 @@ TEST_CASE("a full day conserves money") {
     for (auto& f : w.firms) { f.inventory = 500.0; f.price = 1.0; }
     for (auto& h : w.households) h.planned_consumption = 21.0;
 
-    double before = w.total_money();
+    double before = w.books_balance();
     daily::run_day(w, rng);
-    CHECK(w.total_money() == doctest::Approx(before));
+    CHECK(w.books_balance() == doctest::Approx(before));
 }

@@ -47,9 +47,15 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     }
 }
 
-double World::total_money() const {
+double World::money_in_circulation() const {
     double total = 0.0;
     for (const auto& f : firms) total += f.liquidity;
     for (const auto& h : households) total += h.liquidity;
+    return total;
+}
+
+double World::books_balance() const {
+    double total = money_in_circulation();
+    for (double balance : issuers) total += balance;
     return total;
 }

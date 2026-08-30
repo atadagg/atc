@@ -61,7 +61,7 @@ Metrics compute_metrics(const World& w, int month) {
         m.household_liquidity += h.liquidity;
     }
 
-    m.total_money = w.total_money();
+    m.total_money = w.money_in_circulation();
     return m;
 }
 
