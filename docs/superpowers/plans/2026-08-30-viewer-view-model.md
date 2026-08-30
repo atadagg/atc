@@ -206,15 +206,19 @@ Create `tests/test_viewer_model_agents.cpp`:
 #include "doctest.h"
 #include "model_agents.hpp"
 #include "params.hpp"
+#include "rng.hpp"
 #include "world.hpp"
 
 namespace {
 
 // A world small enough to reason about, with hand-set firm fields.
 World tiny_world() {
-    World w;
-    w.firms.resize(3);
-    w.households.clear();
+    // World has no default constructor -- it seeds its agents from an Rng.
+    // Three firms is below kShopsPerHousehold, so household shops repeat;
+    // that is the documented test-only configuration, and no firm test
+    // reads shops.
+    static Rng rng(1);
+    World w(3, 3, rng);
     w.firms[0].wage = 10.0;
     w.firms[0].price = 1.0;
     w.firms[0].inventory = 5.0;
@@ -486,9 +490,8 @@ Append to `tests/test_viewer_model_agents.cpp`:
 namespace {
 
 World household_world() {
-    World w;
-    w.firms.resize(2);
-    w.households.resize(3);
+    static Rng rng(2);
+    World w(3, 2, rng);
     w.households[0].employer = 1u;
     w.households[0].liquidity = 10.0;
     w.households[0].reservation_wage = 5.0;
@@ -876,13 +879,13 @@ Create `tests/test_viewer_model_views.cpp`:
 #include "model_dist.hpp"
 #include "model_time.hpp"
 #include "recorder.hpp"
+#include "rng.hpp"
 #include "ring_recorder.hpp"
 #include "world.hpp"
 
 TEST_CASE("every distribution yields one value per agent of its kind") {
-    World w;
-    w.firms.resize(4);
-    w.households.resize(6);
+    Rng rng(1);
+    World w(6, 4, rng);
 
     const auto specs = distributions();
     REQUIRE(specs.size() == 7);
@@ -902,8 +905,8 @@ TEST_CASE("only firm distributions are pinnable") {
 }
 
 TEST_CASE("a distribution's bin members index back into the agent array") {
-    World w;
-    w.firms.resize(3);
+    Rng rng(1);
+    World w(3, 3, rng);
     w.firms[0].wage = 0.0;
     w.firms[1].wage = 0.0;
     w.firms[2].wage = 10.0;
