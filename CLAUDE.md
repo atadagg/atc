@@ -26,9 +26,9 @@ python3 -m venv .venv                                   # .venv/ is gitignored
 .venv/bin/python scripts/plot.py output/run.csv         # *.png + index.html
 ```
 
-(An earlier version of this file claimed matplotlib "cannot be installed
-here." That was wrong — it conflated "no pip module" with "unavailable".
-`extra/python-matplotlib` is also in the Arch repos.)
+(This file once claimed matplotlib "cannot be installed here." That was
+wrong — it conflated "no pip module" with "unavailable". Verify environment
+claims before repeating them.)
 
 `scripts/plot.py` writes four figures: `criteria.png` (the four success
 criteria), `cycle.png` (the four cycle series on one time axis),
@@ -52,8 +52,11 @@ failure — it says stop reading, because invariant 1 outranks every economic
 result on the page.
 
 Two thresholds there are judgement calls, not spec: unemployment spread ≥ 0.01
-(the line between the failing 0.0047 and passing 0.0285 runs recorded below),
-and "the wealth gap does not close" read as late ≥ half of early.
+and "the wealth gap does not close" read as late ≥ half of early. The 0.01 was
+drawn when a run measured 0.0285 — but that run is now known to have been
+inflated by the rewiring bug (see Status). The honest reading today is that
+the threshold is unvalidated and the current 0.0039 fails it by a wide
+enough margin that the exact line does not matter.
 
 Stdlib-only, so it runs without the venv; `plot.py` calls it at the end of its
 own run, and a figure that has not been drawn is named on the page rather than
@@ -103,8 +106,8 @@ employer. Line grouping and label wording stay in the panel — those are
 display concerns. See
 `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md`.
 
-Steering (live
-parameter mutation from the UI) is deliberately not implemented: `params.hpp`
+Steering (live parameter mutation from the UI) is deliberately not
+implemented: `params.hpp`
 is `constexpr`, and mutating simulation parameters mid-run needs its own
 answer for determinism (an intervention log, most likely) before it can be
 built without quietly breaking invariant 2.
@@ -189,6 +192,12 @@ Ordering is load-bearing and subtle:
   retry visits within a day. Each firm records the demand it personally
   faced; no firm reads the sum. Recording attempted demand is what makes a
   stocked-out firm expand.
+- **The two shop-rewiring paths draw differently, on purpose.** Price
+  comparison draws the challenger weighted by firm size
+  (`random_unconnected_firm_by_size` — visibility), because an explicit price
+  test then decides the switch. The rationed path draws unweighted
+  (`random_unconnected_firm`), because it applies no price test and a
+  weighting there is unopposed. Do not unify them — see Status.
 - Firms do not optimize, forecast, or maximize profit. Simplicity is the
   design.
 
@@ -246,6 +255,15 @@ fire → wage cut at the next unaffordable payroll → drift back to the floor.
 **Fix:** `network::random_unconnected_firm` (unweighted), used by
 `search_reliable_shop`. Firms at the floor 54 → **0**, firms employing
 66 → **90**, employed households 922 → **998**.
+
+Post-fix the firm population churns instead of stratifying, measured over
+6000 post-burn-in months: **no firm is empty in more than 90% of months, no
+firm is never empty, and all 100 reach 10+ staff at some point**. A firm is
+empty 16% of months on average and recovers. At month 7219, 1000 of 1000
+households are employed with 42 vacancies open — the empty firms are
+mid-turnover, not stranded. Staff still bunch (~14 per staffed firm against
+Lengnick's ~10) because one worker produces 63 units/month and hiring is
+therefore chunky; that is the model's arithmetic, not a defect.
 
 **And it was propping up the criteria.** The cycling and the wealth
 dispersion that criteria 1 and 4 were measuring were substantially two
@@ -322,19 +340,23 @@ as approximate.
 
 ### Why unemployment averages 0.33%, not Lengnick's 5%
 
-Not a defect — an accounting identity: a small number of fires per month
-times a spell under a month. Spells are short because a large share of firms
-hold an open vacancy at any time, so β=5 search almost always finds one.
+Not a defect — an accounting identity, re-measured after the rewiring fix
+(seed 1, 6000 post-burn-in months):
 
-The per-month fire count, vacancy share and hit rate quoted here previously
-(33.2 / 45.6 / 95.2%, against a 1.7% mean) were measured with the
-size-weighted rewiring bug present and have **not** been re-measured since.
-The two rejected explanations below were also measured under it; their
-conclusions are probably unaffected — neither depended on firm
-concentration — but treat them as indicative, not confirmed.
+| Quantity | Measured |
+|---|---|
+| separations | 2.63 /month |
+| mean unemployment spell | 1.24 months |
+| ⇒ households unemployed | 3.3 = **0.33%** |
+| firms holding an open vacancy | 29.4 of 100 |
+
+Spells are short because with 29.4% of firms hiring, β=5 search finds a
+vacancy ~83% of the time.
 
 **Tested and rejected** (test, don't reason — see the averaging-artifact
-lesson above):
+lesson above). Both were measured *before* the rewiring fix, against a 1.7%
+mean; neither depended on firm concentration, so the conclusions should
+hold, but they have not been re-run:
 - Demand telescoping inflating inventory targets → record only the first
   visit of the day, removing all 25.7% duplication: **1.73% → 1.73%**.
 - Search too effective → sweep β = 5,3,2,1: **1.62% → 2.10%**. Nearly flat.
@@ -348,8 +370,9 @@ by construction**; deficient demand is not representable in v1.
 
 **Peak capped at 2.8% by the layoff throttle** (12.6% with the rewiring
 bug). One fire per firm per month (faithful — spec §5.1), plus the
-one-month lag. The per-fire shed figures quoted here before (4.61 workers,
-47.7% of the time more than one) predate the rewiring fix.
+one-month lag. How many workers an over-stocked firm *would* shed if
+unthrottled has not been re-measured since the fix; the 4.61 quoted here
+before is a pre-fix number and was removed rather than carried forward.
 
 Conjecture: mean and range are the same question (unemployment is floored at
 0), and the likely route to both is a demand leakage — the credit/bank
@@ -391,6 +414,12 @@ not by priority.
   scope and why; §8 is the extension map; §11 is the measured v1 results.
 - `docs/superpowers/plans/2026-08-27-lengnick-baseline-v1.md` — the
   implementation plan, including Lengnick's full Table 1 calibration.
+- `docs/superpowers/specs/2026-08-28-economy-viewer-design.md` and
+  `docs/superpowers/plans/2026-08-28-economy-viewer.md` — the live SDL3 +
+  ImGui front-end: snapshot/seek, the recorder ring, the panels.
+- `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` and
+  `docs/superpowers/plans/2026-08-30-viewer-view-model.md` — the viewer's
+  view-model layer: what it separates and why a second skin reuses it.
 - `DESIGN.md` — the originating concept: a magic-capitalism tycoon/grand-
   strategy game. This simulation is the economic substrate that design
   silently assumed. Retained deliberately.
