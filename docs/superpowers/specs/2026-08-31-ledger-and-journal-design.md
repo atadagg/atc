@@ -1,6 +1,6 @@
 # The financial substrate: ledger, journal, and intervention log
 
-Status: **Parts 1 and 3 are implemented and merged. Parts 2 and 4 are design.**
+Status: **Parts 1, 2 and 3 are implemented and merged. Part 4 is design.**
 
 ## Read this first, in plain language
 
@@ -106,7 +106,14 @@ Part 2** — see the risk section there.
 
 ## Part 2 — balanced events, issuers, and enforced solvency
 
-**Design. Not implemented.**
+**Implemented.** `ledger::Kind::Issuer`, `ledger::may_issue`,
+`ledger::Overdraft`, `World::issuers`, `World::money_in_circulation()`,
+`World::books_balance()`.
+
+Outcome: the distribution-tail fix landed first (it had to — see the
+measurement below), enforcement is on, and it cost nothing measurable:
+13.67 s against 14.31 s before, despite a branch on all ~855M transfers.
+A completed run is now *proof* that no account went negative.
 
 ### The rule
 
@@ -416,11 +423,11 @@ Part 2 — the two are the same piece of arithmetic.
 1. ~~`transfer` chokepoint~~ — **done**
 2. ~~Optional journaling behind `Recorder`~~ — **done**
 3. ~~Split `params.hpp` into structural and behavioural~~ — **done**
-4. **Part 2**: measure the rounding remainder; fix the distribution tail;
-   `Kind` gains issuer kinds; `may_issue`; solvency enforcement in `transfer`;
-   `books_balance()` / `money_in_circulation()` split. Measure the cost.
+4. ~~Part 2: distribution tail, issuer kinds, solvency enforcement, the
+   `books_balance()` / `money_in_circulation()` split~~ — **done**
 5. **Part 4**: `Intervention`, the log, and application at month open.
 6. A scrub-across-an-intervention test (the `Params` half is already done).
 7. Viewer steering UI — the first consumer, and the reason the rest exists.
 
-Step 4 is a prerequisite for any bank extension and independent of steps 5–7.
+The substrate is now bank-ready: an extension that creates money needs an
+issuer account and nothing else from this document.
