@@ -5,9 +5,17 @@
 namespace params {
 
 // =====================================================================
-// Published calibration (Lengnick 2013 Table 1, plus the paper's stated
-// population/network setup) — do not tune. These values come from the
-// published paper and must match it exactly.
+// STRUCTURAL — compile-time constants, and they must stay that way.
+//
+// These define memory layout and the shape of the tick, not behaviour.
+// `kShopsPerHousehold` is the size of the array inside every Household;
+// `kDaysPerMonth` is the tick shape. Making one of these runtime state
+// would stop `Household::shops` being a fixed array, which is what keeps
+// agents trivially copyable and therefore what makes the viewer's
+// backward scrub byte-exact (invariants 3 and 4).
+//
+// The test for this pile: "could a UI slider move it mid-run?" If no,
+// it belongs here.
 // =====================================================================
 
 // --- Time ---
@@ -18,57 +26,84 @@ inline constexpr uint32_t kNumHouseholds = 1000;
 inline constexpr uint32_t kNumFirms = 100;
 inline constexpr uint32_t kShopsPerHousehold = 7;
 
-// --- Households (Lengnick 2013 Table 1) ---
-inline constexpr double kPriceSwitchThreshold = 0.01;   // xi
-inline constexpr uint32_t kUnemployedFirmVisits = 5;    // beta
-inline constexpr double kEmployedSearchProb = 0.1;      // pi
-inline constexpr double kConsumptionExponent = 0.9;     // alpha
-inline constexpr uint32_t kMaxShopVisitsPerDay = 7;     // n
-inline constexpr double kProbPriceSearch = 0.25;        // psi_Price
-inline constexpr double kProbQuantSearch = 0.25;        // psi_Quant
-inline constexpr double kUnemployedReservationCut = 0.10;
-
-// --- Firms (Lengnick 2013 Table 1) ---
-inline constexpr uint32_t kMonthsBeforeWageCut = 24;    // gamma
-inline constexpr double kWageAdjustMax = 0.019;         // delta
-inline constexpr double kInventoryUpperFactor = 1.0;    // phi upper
-inline constexpr double kInventoryLowerFactor = 0.25;   // phi lower
-inline constexpr double kPriceUpperFactor = 1.15;       // varphi upper
-inline constexpr double kPriceLowerFactor = 1.025;      // varphi lower
-inline constexpr double kPriceAdjustMax = 0.02;         // vartheta
-inline constexpr double kPriceChangeProb = 0.75;        // theta
-inline constexpr double kProductivity = 3.0;            // lambda
-inline constexpr double kBufferFactor = 0.1;            // chi
-
-// --- Shopping ---
-inline constexpr double kDemandSatisfiedFraction = 0.95;
-
 // =====================================================================
-// Everything above this line is published calibration (Lengnick 2013
-// Table 1) — do not tune. Everything below is initial conditions and run
-// configuration: not specified by the paper, chosen for this
-// implementation, and safe to adjust without touching the model itself.
+// INITIAL CONDITIONS — compile-time, and structural in the same sense.
+//
+// Not specified by the paper; chosen for this implementation. They are
+// consumed once, at construction (several are default member initializers
+// on `Firm`/`Household` in agents.hpp), so "change it at month 300" is not
+// a meaningful operation. They fail the slider test for a different reason
+// than the layout constants above, but they fail it.
 // =====================================================================
 
-// --- Initial conditions (not specified by the paper) ---
 inline constexpr double kInitialFirmLiquidity = 0.0;
 inline constexpr double kInitialHouseholdLiquidity = 100.0;
 inline constexpr double kInitialPrice = 1.0;
 inline constexpr double kInitialWage = 30.0;
 inline constexpr double kInitialInventory = 0.0;
 
-// --- Emergency wage cut bounds (not specified by the paper) ---
-// Lengnick's no-bankruptcy rule (§2.4) cuts the wage to whatever the firm can
-// afford. Unbounded, a firm that sells nothing repeatedly cuts by ~90% a month
-// and reaches zero -- and zero is absorbing, because every recovery channel in
-// firm_decisions::adjust_wage is multiplicative. A zero wage also collapses the
-// price band to [0, 0], permanently disabling that firm's price-raise gate.
-// These two bounds keep the rule intact while removing the absorbing state.
-inline constexpr double kMaxEmergencyWageCut = 0.5;
-inline constexpr double kMinWage = 1.0;
+// =====================================================================
+// RUN CONFIGURATION — CLI defaults, not simulation parameters.
+// =====================================================================
 
-// --- Run configuration (not specified by the paper) ---
 inline constexpr int kBurnInMonths = 1000;
 inline constexpr int kMeasurementMonths = 6000;
 
 }  // namespace params
+
+// =====================================================================
+// BEHAVIOURAL — runtime state, one copy per World (`World::params`).
+//
+// Every rate, threshold and probability the model consults while running.
+// These are runtime rather than `constexpr` so that a parameter can change
+// mid-run without breaking invariant 2 (determinism): a run is then defined
+// by (seed, intervention log) rather than by the seed alone, and because
+// `Params` lives inside `World` it is carried by `SimSnapshot` for free —
+// restoring month 400 restores the parameters as of month 400, which is the
+// detail that makes the viewer's backward scrub correct across a parameter
+// change.
+//
+// The defaults are Lengnick 2013 Table 1 and must match the paper exactly.
+// The Greek letter in each comment is the paper's symbol.
+//
+// Must stay a plain aggregate: `SimSnapshot` is a plain assignment, and a
+// non-copyable member here is the line that stops it compiling.
+// =====================================================================
+
+struct Params {
+    // --- Households (Lengnick 2013 Table 1) ---
+    double price_switch_threshold = 0.01;   // xi
+    uint32_t unemployed_firm_visits = 5;    // beta
+    double employed_search_prob = 0.1;      // pi
+    double consumption_exponent = 0.9;      // alpha
+    uint32_t max_shop_visits_per_day = 7;   // n
+    double prob_price_search = 0.25;        // psi_Price
+    double prob_quant_search = 0.25;        // psi_Quant
+    double unemployed_reservation_cut = 0.10;
+
+    // --- Firms (Lengnick 2013 Table 1) ---
+    uint32_t months_before_wage_cut = 24;   // gamma
+    double wage_adjust_max = 0.019;         // delta
+    double inventory_upper_factor = 1.0;    // phi upper
+    double inventory_lower_factor = 0.25;   // phi lower
+    double price_upper_factor = 1.15;       // varphi upper
+    double price_lower_factor = 1.025;      // varphi lower
+    double price_adjust_max = 0.02;         // vartheta
+    double price_change_prob = 0.75;        // theta
+    double productivity = 3.0;              // lambda
+    double buffer_factor = 0.1;             // chi
+
+    // --- Shopping (not in Table 1) ---
+    double demand_satisfied_fraction = 0.95;
+
+    // --- Emergency wage cut bounds (not specified by the paper) ---
+    // Lengnick's no-bankruptcy rule (§2.4) cuts the wage to whatever the firm
+    // can afford. Unbounded, a firm that sells nothing repeatedly cuts by ~90%
+    // a month and reaches zero -- and zero is absorbing, because every recovery
+    // channel in firm_decisions::adjust_wage is multiplicative. A zero wage also
+    // collapses the price band to [0, 0], permanently disabling that firm's
+    // price-raise gate. These two bounds keep the rule intact while removing
+    // the absorbing state.
+    double max_emergency_wage_cut = 0.5;
+    double min_wage = 1.0;
+};

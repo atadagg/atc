@@ -34,8 +34,8 @@ void pay_wages(World& w, ledger::Journal* journal) {
             // and marginal_cost 0 collapses the price band to [0, 0]. The
             // shortfall is arrears the firm owes its workers, not a licence to
             // post a wage it can never climb back from.
-            double bounded = std::max(f.wage * (1.0 - params::kMaxEmergencyWageCut),
-                                      params::kMinWage);
+            double bounded = std::max(f.wage * (1.0 - w.params.max_emergency_wage_cut),
+                                      w.params.min_wage);
             f.wage = std::max(per_worker, bounded);
         }
 
@@ -65,7 +65,7 @@ void distribute_profits(World& w, ledger::Journal* journal) {
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
         Firm& f = w.firms[fi];
         double wage_bill = f.wage * static_cast<double>(f.employees.size());
-        double buffer = params::kBufferFactor * wage_bill;
+        double buffer = w.params.buffer_factor * wage_bill;
         double profit = f.liquidity - buffer;
         if (profit <= 0.0) continue;
 
@@ -89,7 +89,7 @@ void distribute_profits(World& w, ledger::Journal* journal) {
 void update_reservation_wages(World& w) {
     for (auto& h : w.households) {
         if (!h.employed()) {
-            h.reservation_wage *= (1.0 - params::kUnemployedReservationCut);
+            h.reservation_wage *= (1.0 - w.params.unemployed_reservation_cut);
             continue;
         }
         double income = w.firms[h.employer].wage;

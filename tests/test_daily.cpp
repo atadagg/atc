@@ -11,7 +11,7 @@ TEST_CASE("production is linear in headcount") {
     size_t n = w.firms[0].employees.size();
     daily::produce(w);
     CHECK(w.firms[0].inventory ==
-          doctest::Approx(params::kProductivity * static_cast<double>(n)));
+          doctest::Approx(w.params.productivity * static_cast<double>(n)));
 }
 
 TEST_CASE("a firm with no employees produces nothing") {

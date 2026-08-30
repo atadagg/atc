@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 152 cases
+./build/economy_tests                              # 169 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 ```
@@ -118,7 +118,7 @@ promoted ahead of the §8 extensions — see Next work, and
 
 | File | Responsibility |
 |---|---|
-| `params.hpp` | All constants. Split into published calibration vs. invented initial conditions — respect that boundary. |
+| `params.hpp` | Structural `constexpr` (layout, initial conditions, run config) vs. the behavioural `Params` struct that lives on `World`. Respect that boundary. |
 | `agents.hpp` | `Firm` and `Household` plain structs, `NO_FIRM`/`NO_HOUSEHOLD` sentinel |
 | `world.{hpp,cpp}` | Owns the agent arrays; `total_money()` |
 | `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write `liquidity`; `Journal`, `Entry`, `Reason` |
@@ -218,7 +218,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 152 tests, 227,869 assertions.
+v1 complete and merged. 169 tests, 371,069 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -287,6 +287,44 @@ household, so it is O(firms x households) per month — 100 x 1000 — against
 
 That ratio is itself a finding: almost all recorded money movement in this
 economy is the ownership proxy, not trade.
+
+### Done: structural vs. behavioural parameters (step 3 of the ledger spec)
+
+`params.hpp` is now two piles, and the boundary is load-bearing:
+
+| Pile | Form | Examples |
+|---|---|---|
+| Structural | `constexpr` in `namespace params` | `kNumHouseholds`, `kNumFirms`, `kShopsPerHousehold`, `kDaysPerMonth` |
+| Initial conditions | `constexpr` in `namespace params` | `kInitialWage`, `kInitialPrice`, … |
+| Run configuration | `constexpr` in `namespace params` | `kBurnInMonths`, `kMeasurementMonths` |
+| Behavioural | `struct Params`, one per `World` | every rate, threshold and probability the model consults while running |
+
+The test for the boundary: **could a UI slider move it mid-run?** Structural
+constants fail it because they define memory layout — `kShopsPerHousehold` is
+the size of the array inside every `Household`, and making it runtime state
+would end trivially-copyable agents and with them the byte-exact backward
+scrub (invariants 3 and 4). Initial conditions fail it for a different
+reason: they are consumed once at construction, several as default member
+initializers in `agents.hpp`, so "change it at month 300" is not a meaningful
+operation.
+
+`Params` lives on `World`, which is why it costs almost no plumbing —
+everything already takes `World&` — and why it is **already inside
+`SimSnapshot`**: the snapshot copies the whole `World`. Restoring month 400
+therefore restores the parameters as of month 400, which is spec detail #1,
+satisfied structurally rather than by remembering to. `Params` must stay a
+plain aggregate for the same reason `SimSnapshot` must stay a plain
+assignment.
+
+Three functions that took only a `Firm` now take a `const Params&` as well:
+`marginal_cost`, `inventory_band`, `adjust_wage`, `adjust_price`.
+
+One behavioural parameter needed a guard. `max_shop_visits_per_day` (the
+paper's *n*) is a loop bound over a fixed-size array of shop slots, so
+`daily::shop` clamps it to `kShopsPerHousehold`: a raised *n* cannot visit
+shops the household does not have. At the calibrated 7 the clamp is a no-op.
+
+The 6000-month reference run is **byte-identical** across this change.
 
 **The reference baseline moved, and this is why.** The spec's acceptance test
 was byte-identical output. It is not byte-identical, for a reason that is
@@ -474,15 +512,22 @@ pieces that make everything after them cheaper, and both get harder once more
 modules move money. See
 `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`.
 
-- ~~**`transfer(from, to, amount)`**~~ — **done**, see Status. Journaling it
-  behind `Recorder` (step 2 of the spec's order of work) is still open.
-- **The intervention log.** A run becomes *(seed, log)* rather than seed
-  alone, which is what lets parameters change mid-run without breaking
-  invariant 2. This is the blocker named in the Viewer section above, and
-  the same mechanism gives save games, replays, scenario tests as data, and
-  a readable trail of how an economy reached its state. Requires splitting
-  `params.hpp` into structural (`constexpr`) and behavioural (runtime
-  `Params`), and putting `Params` into `SimSnapshot`.
+Steps 1–3 of the spec's order of work are **done** (see Status):
+`transfer`, journaling, and the `constexpr`/`Params` split. What remains:
+
+- **`Intervention`, the log, and scheduler application at month open**
+  (spec step 4). A run becomes *(seed, log)* rather than seed alone, which
+  is what lets parameters change mid-run without breaking invariant 2. The
+  `Params` half of the prerequisite is already in place and already inside
+  `SimSnapshot`, so spec step 5 is reduced to writing the
+  scrub-across-an-intervention test.
+- **Viewer steering UI** (spec step 6) — the first consumer, and the reason
+  the rest exists.
+
+Note the one decision the spec flags and the log still needs: some
+interventions (a money injection) break invariant 1 *on purpose*, so the
+invariant becomes "money is constant except across logged injections" and
+the check must consult the log. Decide it deliberately when writing step 4.
 
 ### Extensions, in dependency order
 

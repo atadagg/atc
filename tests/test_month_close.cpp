@@ -107,7 +107,7 @@ TEST_CASE("a firm retains its buffer before distributing profit") {
     f.wage = 100.0;
     f.liquidity = 1000.0;
     double wage_bill = f.wage * static_cast<double>(f.employees.size());
-    double expected_buffer = params::kBufferFactor * wage_bill;
+    double expected_buffer = w.params.buffer_factor * wage_bill;
 
     month_close::distribute_profits(w);
     CHECK(f.liquidity == doctest::Approx(expected_buffer));
@@ -200,8 +200,8 @@ TEST_CASE("an emergency wage cut is bounded and never reaches zero") {
     // Unbounded, the cut lands exactly on zero, and zero is absorbing under
     // the multiplicative updates in firm_decisions::adjust_wage.
     CHECK(f.wage > 0.0);
-    CHECK(f.wage >= params::kMinWage);
-    CHECK(f.wage >= 100.0 * (1.0 - params::kMaxEmergencyWageCut));
+    CHECK(f.wage >= w.params.min_wage);
+    CHECK(f.wage >= 100.0 * (1.0 - w.params.max_emergency_wage_cut));
 }
 
 TEST_CASE("repeated emergency cuts cannot drive a wage to zero") {
@@ -216,8 +216,8 @@ TEST_CASE("repeated emergency cuts cannot drive a wage to zero") {
         month_close::pay_wages(w);
     }
 
-    CHECK(f.wage >= params::kMinWage);
+    CHECK(f.wage >= w.params.min_wage);
     // A zero wage collapses the price band to [0, 0], which permanently
     // disables the price-raise gate in firm_decisions::adjust_price.
-    CHECK(firm_decisions::marginal_cost(f) > 0.0);
+    CHECK(firm_decisions::marginal_cost(f, w.params) > 0.0);
 }

@@ -19,7 +19,7 @@ double average_shop_price(const World& w, uint32_t household) {
 }
 
 void search_cheaper_shop(World& w, uint32_t household, Rng& rng) {
-    if (!rng.chance(params::kProbPriceSearch)) return;
+    if (!rng.chance(w.params.prob_price_search)) return;
 
     Household& h = w.households[household];
     uint32_t slot = rng.index(params::kShopsPerHousehold);
@@ -32,13 +32,13 @@ void search_cheaper_shop(World& w, uint32_t household, Rng& rng) {
     double challenger_price = w.firms[challenger].price;
 
     // Switch only if the challenger is at least xi cheaper, proportionally.
-    if (challenger_price <= incumbent_price * (1.0 - params::kPriceSwitchThreshold)) {
+    if (challenger_price <= incumbent_price * (1.0 - w.params.price_switch_threshold)) {
         network::replace_shop(w, household, slot, challenger);
     }
 }
 
 void search_reliable_shop(World& w, uint32_t household, Rng& rng) {
-    if (!rng.chance(params::kProbQuantSearch)) return;
+    if (!rng.chance(w.params.prob_quant_search)) return;
 
     Household& h = w.households[household];
     double total_shortfall = 0.0;
@@ -69,10 +69,10 @@ void search_job(World& w, uint32_t household, Rng& rng) {
 
     uint32_t visits = 0;
     if (!h.employed()) {
-        visits = params::kUnemployedFirmVisits;
+        visits = w.params.unemployed_firm_visits;
     } else if (w.firms[h.employer].wage < h.reservation_wage) {
         visits = 1;  // underpaid: always searching
-    } else if (rng.chance(params::kEmployedSearchProb)) {
+    } else if (rng.chance(w.params.employed_search_prob)) {
         visits = 1;  // satisfied: occasional look around
     }
 
@@ -96,7 +96,7 @@ void set_consumption_budget(World& w, uint32_t household) {
     if (avg_price <= 0.0) { h.planned_consumption = 0.0; return; }
 
     double real_wealth = h.liquidity / avg_price;
-    double desired = std::pow(real_wealth, params::kConsumptionExponent);
+    double desired = std::pow(real_wealth, w.params.consumption_exponent);
 
     // The min enforces the budget constraint: for real_wealth < 1 the power
     // function would otherwise exceed available wealth.

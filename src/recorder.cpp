@@ -19,13 +19,13 @@ Metrics compute_metrics(const World& w, int month) {
     }
     m.unemployment_rate =
         static_cast<double>(unemployed) / static_cast<double>(w.households.size());
-    // Rate, not a monthly total: kProductivity is a per-day-per-worker
+    // Rate, not a monthly total: productivity is a per-day-per-worker
     // yield, so this is employed workers' capacity for a single day, not
     // the month's output. It is also measured after month_close::run --
     // specifically after apply_pending_fires -- so `employed` here already
     // reflects next month's headcount, not the headcount that produced
     // whatever inventory exists at this recording point.
-    m.daily_capacity = params::kProductivity * static_cast<double>(employed);
+    m.daily_capacity = w.params.productivity * static_cast<double>(employed);
 
     double price_sum = 0.0;
     double wage_sum = 0.0;

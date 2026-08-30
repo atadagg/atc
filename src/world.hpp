@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "agents.hpp"
+#include "params.hpp"
 #include "rng.hpp"
 
 // Owns all agent state. The single source of truth for the simulation.
@@ -15,6 +16,12 @@ public:
 
     std::vector<Firm> firms;
     std::vector<Household> households;
+
+    // Behavioural parameters for this run. Runtime state rather than
+    // `constexpr` so they can change mid-run; carried by `SimSnapshot`
+    // because it copies the whole World, which is what keeps a backward
+    // scrub correct across a parameter change. See params.hpp.
+    Params params;
 
     // Master invariant: this must not change across a tick.
     double total_money() const;

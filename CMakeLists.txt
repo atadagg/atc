@@ -44,6 +44,7 @@ add_executable(economy_tests
     tests/test_rng.cpp
     tests/test_world.cpp
     tests/test_ledger.cpp
+    tests/test_params.cpp
     tests/test_network.cpp
     tests/test_firm_decisions.cpp
     tests/test_household_decisions.cpp

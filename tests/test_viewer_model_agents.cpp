@@ -24,7 +24,7 @@ World tiny_world() {
     w.firms[0].has_open_vacancy = false;
     w.firms[0].demand_last_month = 7.0;
 
-    w.firms[1].wage = params::kMinWage;
+    w.firms[1].wage = w.params.min_wage;
     w.firms[1].price = 2.0;
     w.firms[1].inventory = 0.0;
     w.firms[1].liquidity = 50.0;

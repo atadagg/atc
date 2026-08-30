@@ -31,12 +31,12 @@ constexpr ColumnSpec kHouseholdColumns[] = {
     {"planned consumption", CellKind::Number,   2, false},
 };
 
-bool firm_passes(const Filters& f, uint32_t i, const Firm& firm) {
+bool firm_passes(const Filters& f, uint32_t i, const Firm& firm, double min_wage) {
     if (!f.pinned_firms.empty() &&
         std::find(f.pinned_firms.begin(), f.pinned_firms.end(), i) == f.pinned_firms.end()) {
         return false;
     }
-    if (f.wage_at_floor && firm.wage > params::kMinWage) return false;
+    if (f.wage_at_floor && firm.wage > min_wage) return false;
     if (f.vacancy_open && !firm.has_open_vacancy) return false;
     if (f.inventory_zero && firm.inventory > 0.0) return false;
     return true;
@@ -66,7 +66,7 @@ std::vector<uint32_t> firm_rows(const World& w, const Filters& f, SortSpec sort)
     std::vector<uint32_t> rows;
     rows.reserve(w.firms.size());
     for (uint32_t i = 0; i < w.firms.size(); ++i) {
-        if (firm_passes(f, i, w.firms[i])) rows.push_back(i);
+        if (firm_passes(f, i, w.firms[i], w.params.min_wage)) rows.push_back(i);
     }
 
     const int columns = static_cast<int>(firm_columns().size());

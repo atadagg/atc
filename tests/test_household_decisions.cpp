@@ -29,7 +29,7 @@ TEST_CASE("consumption budget follows (m/P)^alpha and respects the constraint") 
     household_decisions::set_consumption_budget(w, 0);
 
     double real_wealth = 200.0 / 2.0;  // 100
-    double expected = std::pow(real_wealth, params::kConsumptionExponent);
+    double expected = std::pow(real_wealth, w.params.consumption_exponent);
     CHECK(w.households[0].planned_consumption == doctest::Approx(expected));
     CHECK(w.households[0].planned_consumption <= real_wealth);
 }

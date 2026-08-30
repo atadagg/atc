@@ -90,3 +90,16 @@ TEST_CASE("money is conserved across a seek") {
     s.seek(100);
     CHECK(s.world().total_money() == doctest::Approx(start).epsilon(1e-12));
 }
+
+TEST_CASE("parameters travel with a snapshot") {
+    Sim sim(1);
+    sim.step(3);
+    CHECK(sim.world().params.productivity == doctest::Approx(3.0));
+
+    SimSnapshot s = sim.snapshot();
+    CHECK(s.world.params.productivity == doctest::Approx(3.0));
+
+    s.world.params.productivity = 11.0;
+    sim.restore(s);
+    CHECK(sim.world().params.productivity == doctest::Approx(11.0));
+}
