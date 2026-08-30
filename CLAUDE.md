@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 204 cases
+./build/economy_tests                              # 205 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 
@@ -268,7 +268,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 204 tests, 437,349 assertions.
+v1 complete and merged. 205 tests, 437,351 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -468,6 +468,68 @@ that is where a typo lands.
 The steering panel is the first consumer of the whole substrate. See the Viewer
 section for the scheduled-not-applied rule and why the slider appears to snap
 back.
+
+### Resolved: the negative distribution remainder (seeds 5 and 7)
+
+This was listed as a deferred item reading *"could in principle round
+marginally negative... did not occur once in 7000 months. Left unclamped
+deliberately."* **It occurs.** Seeds 5 and 7 abort mid-run:
+
+```
+./build/economy --seed 5 --burn-in 337 --months 1 --out /dev/null
+terminate called after throwing an instance of 'std::invalid_argument'
+  what():  ledger::transfer: amount must be finite and non-negative
+```
+
+The tail fix absorbed overshoot in one direction only. 999 proportional shares
+can sum to marginally *more* than the pot, leaving the firm a hair **below** its
+buffer and the last remainder negative (measured: −1.12e-12 against a pot of
+562). A household whose entitlement is exactly zero — no liquidity of its own —
+is maximally exposed, because it has no share of its own to absorb the error
+accumulated across the other 999.
+
+**Fix:** every payment is capped by what the firm can actually part with
+(`capped_payment`), not just the last one. In the ordinary case the cap never
+binds — the reference run is byte-identical. It also closes a second latent
+failure that had not been hit: for a firm whose retained buffer is zero,
+an overshoot would overdraw the account outright and trip `Overdraft`.
+
+The loudness was kept where it earns its place. `check_landed_on_target`
+asserts after each distribution that the firm is sitting on its target balance,
+so a crumb is absorbed while a real discrepancy in the shares still throws.
+That is the distinction the original "loud beats silent" reasoning missed:
+there are two magnitudes, and only one of them is a bug.
+
+**The lesson, and it is the recurring one.** "Did not occur once in 7000
+months" was seven thousand months of *one seed*. Seeds 1–4 are all clean, so
+even a spot check would have missed it; it took a 20-seed ensemble to surface.
+**One seed is not a sample** — the same shape as the averaging artifact and
+the rewiring bug above.
+
+### Criteria across 20 seeds
+
+Single-seed numbers had been carrying more weight than they could bear. The
+ensemble (`scripts/ensemble.py --seeds 20`, 6000 post-burn-in months each):
+
+| Quantity | mean | sd | min | max |
+|---|---|---|---|---|
+| unemployment mean | 0.0034 | 0.0003 | 0.0025 | 0.0038 |
+| unemployment sd | 0.0041 | 0.0004 | 0.0030 | 0.0047 |
+| unemployment max | 0.0295 | 0.0035 | 0.0240 | 0.0370 |
+| Phillips | −0.4379 | 0.0332 | −0.4928 | −0.3326 |
+| Beveridge | −0.6202 | 0.0176 | −0.6453 | −0.5718 |
+| Gini mean | 0.0145 | 0.0007 | 0.0123 | 0.0156 |
+| books spread | 2.26e-9 | 7e-10 | 1.11e-9 | 4.00e-9 |
+
+Criteria 2 and 3 hold on **20/20** seeds. Criterion 1 fails on all of them —
+the low mean and narrow range are structural, not a seed artifact, which
+strengthens the demand-leakage explanation.
+
+**Correction to criterion 4.** Seed 1 shows the wealth gap *narrowing* (early
+0.0168 → late 0.0121) and this file said so. Across 20 seeds it **widens**:
+early 0.0137 → late 0.0152, and late ≥ half of early on 20/20. The falling
+trend was a one-seed artifact. Criterion 4 passes more convincingly than
+previously recorded.
 
 ### Measured performance baseline
 
@@ -777,12 +839,6 @@ not by priority.
 
 Real but judged not worth fixing yet. Reconsider when touching that code.
 
-- The last share in a distribution (`f.liquidity - buffer`, or
-  `f.liquidity - target_balance`) could in principle round marginally negative
-  when the true final share is ~0, which `transfer` would reject as an invalid
-  amount. It did not occur once in 7000 months. Left unclamped deliberately: a
-  loud failure beats a silent `std::max(0.0, ...)` that would leave a firm
-  below its buffer and hide the arithmetic going wrong.
 - `network` has no bounds asserts on its index parameters.
 - `daily.cpp`'s cost clamp does not reduce `bought`, so at machine-epsilon
   scale a firm can ship marginally more than paid for. Conservation

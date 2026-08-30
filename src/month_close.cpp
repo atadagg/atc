@@ -1,6 +1,9 @@
 #include "month_close.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "ledger.hpp"
@@ -9,6 +12,36 @@
 #include "world.hpp"
 
 namespace month_close {
+namespace {
+
+// A distribution pays out a pot in N pieces. Finite arithmetic means the N
+// pieces need not sum to exactly the pot -- in either direction -- so each
+// payment is capped by what the firm can actually part with: what it holds
+// above the balance it must be left with.
+//
+// In the ordinary case the cap never binds; the shares sum to the pot by
+// construction. It binds only on a rounding crumb, and it is what stops two
+// distinct failures: a negative final remainder (rejected as an invalid
+// amount) and, for a firm whose retained balance is zero, an outright
+// overdraw of the account.
+double capped_payment(double want, double available) {
+    if (available <= 0.0) return 0.0;
+    return std::min(want, available);
+}
+
+// Absorbing a crumb is correct; absorbing a real discrepancy is not. After a
+// distribution the firm must be sitting on its target balance, and anything
+// further out than float noise is a bug in the shares rather than in the last
+// bit of a double.
+void check_landed_on_target(double balance, double target, const char* where) {
+    const double tolerance = 1e-9 * std::max(1.0, std::abs(target));
+    if (std::abs(balance - target) > tolerance) {
+        throw std::logic_error(std::string(where) +
+                               ": distribution did not land on its target balance");
+    }
+}
+
+}  // namespace
 
 void pay_wages(World& w, ledger::Journal* journal) {
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
@@ -48,16 +81,20 @@ void pay_wages(World& w, ledger::Journal* journal) {
         // Paid one worker at a time, through the chokepoint. `headcount`
         // debits of `per_worker` need not sum to exactly `bill`, so the last
         // worker is paid the difference between what the firm holds and what
-        // it should be left holding. Without this the firm keeps a
-        // machine-epsilon residue -- and when that residue is negative the
-        // solvency check rejects a payment that happens every month in a
-        // healthy run (measured: 5,838 times per reference run).
+        // it should be left holding, and every payment is capped at what is
+        // actually available. Without the remainder the firm keeps a
+        // machine-epsilon residue and the solvency check rejects a payment
+        // that happens every month in a healthy run (measured: 5,838 times per
+        // reference run); without the cap the remainder itself can come out
+        // negative.
         for (size_t i = 0; i < f.employees.size(); ++i) {
             const bool last = (i + 1 == f.employees.size());
-            const double pay = last ? (f.liquidity - target_balance) : per_worker;
-            ledger::transfer(w, ledger::firm(fi), ledger::household(f.employees[i]), pay,
+            const double want = last ? (f.liquidity - target_balance) : per_worker;
+            ledger::transfer(w, ledger::firm(fi), ledger::household(f.employees[i]),
+                             capped_payment(want, f.liquidity - target_balance),
                              ledger::Reason::Wage, journal);
         }
+        check_landed_on_target(f.liquidity, target_balance, "pay_wages");
     }
 }
 
@@ -84,21 +121,30 @@ void distribute_profits(World& w, ledger::Journal* journal) {
         // zero wage bill, hence a zero buffer, hence pays out everything --
         // which is the case where separately computed shares are most likely
         // to overshoot the pot (measured: 11,115 times per reference run).
+        //
+        // The 999 proportional shares can also overshoot in the *other*
+        // direction, leaving the firm a hair below its buffer and this
+        // remainder negative. A household whose entitlement is exactly zero
+        // (no liquidity of its own) is maximally exposed to that, because it
+        // has no share of its own to absorb the accumulated error. Seeds 5 and
+        // 7 aborted this way before `capped_payment` was added.
         const double even_share = profit / static_cast<double>(w.households.size());
         for (uint32_t i = 0; i < w.households.size(); ++i) {
             const bool last = (i + 1 == w.households.size());
-            double share;
+            double want;
             if (last) {
-                share = f.liquidity - buffer;
+                want = f.liquidity - buffer;
             } else if (total_household_liquidity <= 0.0) {
                 // Degenerate case: split evenly rather than destroying money.
-                share = even_share;
+                want = even_share;
             } else {
-                share = profit * (initial_liquidity[i] / total_household_liquidity);
+                want = profit * (initial_liquidity[i] / total_household_liquidity);
             }
-            ledger::transfer(w, ledger::firm(fi), ledger::household(i), share,
+            ledger::transfer(w, ledger::firm(fi), ledger::household(i),
+                             capped_payment(want, f.liquidity - buffer),
                              ledger::Reason::Profit, journal);
         }
+        check_landed_on_target(f.liquidity, buffer, "distribute_profits");
     }
 }
 

@@ -1,4 +1,5 @@
 #include "doctest.h"
+#include "scheduler.hpp"
 #include "month_close.hpp"
 #include "network.hpp"
 #include "world.hpp"
@@ -279,4 +280,24 @@ TEST_CASE("a staffed firm retains exactly its buffer") {
     month_close::distribute_profits(w);
     CHECK(f.liquidity == doctest::Approx(buffer));
     CHECK(f.liquidity >= 0.0);
+}
+
+// Regression: seeds 5 and 7 aborted mid-run because the proportional shares in
+// distribute_profits can overshoot the pot by a rounding crumb, leaving the
+// firm fractionally BELOW its buffer and the last recipient's remainder
+// negative. The tail fix absorbed overshoot in one direction only.
+//
+// Found by a 20-seed ensemble. Seeds 1-4 are clean, which is why 7000 months
+// of seed 1 never showed it -- one seed is not a sample.
+TEST_CASE("a long run does not abort on a negative distribution remainder"
+          * doctest::timeout(120)) {
+    for (uint64_t seed : {uint64_t{5}, uint64_t{7}}) {
+        CAPTURE(seed);
+        Rng rng(seed);
+        World w(params::kNumHouseholds, params::kNumFirms, rng);
+        Scheduler s(w, rng);
+        REQUIRE_NOTHROW([&] {
+            for (int m = 0; m < 400; ++m) s.run_month();
+        }());
+    }
 }
