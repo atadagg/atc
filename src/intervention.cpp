@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include "world.hpp"
@@ -12,42 +13,53 @@ namespace {
 // One row per behavioural parameter. `Member` carries the field's real type,
 // so an integer parameter converts once here rather than at every call site.
 template <auto Member>
-constexpr ParamSpec spec(std::string_view name) {
+constexpr ParamSpec spec(std::string_view name, double lo, double hi) {
     using Field = std::remove_reference_t<decltype(std::declval<Params&>().*Member)>;
     return ParamSpec{
         name,
         [](Params& p, double v) { p.*Member = static_cast<Field>(v); },
         [](const Params& p) { return static_cast<double>(p.*Member); },
+        lo,
+        hi,
     };
 }
 
+// A probability is [0, 1]; the rest are bounded generously enough to explore
+// with and tightly enough to catch a typo in a hand-written scenario.
+constexpr double kProb = 1.0;
+
 constexpr ParamSpec kSpecs[] = {
-    spec<&Params::price_switch_threshold>("price_switch_threshold"),
-    spec<&Params::unemployed_firm_visits>("unemployed_firm_visits"),
-    spec<&Params::employed_search_prob>("employed_search_prob"),
-    spec<&Params::consumption_exponent>("consumption_exponent"),
-    spec<&Params::max_shop_visits_per_day>("max_shop_visits_per_day"),
-    spec<&Params::prob_price_search>("prob_price_search"),
-    spec<&Params::prob_quant_search>("prob_quant_search"),
-    spec<&Params::unemployed_reservation_cut>("unemployed_reservation_cut"),
-    spec<&Params::months_before_wage_cut>("months_before_wage_cut"),
-    spec<&Params::wage_adjust_max>("wage_adjust_max"),
-    spec<&Params::inventory_upper_factor>("inventory_upper_factor"),
-    spec<&Params::inventory_lower_factor>("inventory_lower_factor"),
-    spec<&Params::price_upper_factor>("price_upper_factor"),
-    spec<&Params::price_lower_factor>("price_lower_factor"),
-    spec<&Params::price_adjust_max>("price_adjust_max"),
-    spec<&Params::price_change_prob>("price_change_prob"),
-    spec<&Params::productivity>("productivity"),
-    spec<&Params::buffer_factor>("buffer_factor"),
-    spec<&Params::demand_satisfied_fraction>("demand_satisfied_fraction"),
-    spec<&Params::max_emergency_wage_cut>("max_emergency_wage_cut"),
-    spec<&Params::min_wage>("min_wage"),
+    spec<&Params::price_switch_threshold>("price_switch_threshold", 0.0, kProb),
+    spec<&Params::unemployed_firm_visits>("unemployed_firm_visits", 0.0, 100.0),
+    spec<&Params::employed_search_prob>("employed_search_prob", 0.0, kProb),
+    spec<&Params::consumption_exponent>("consumption_exponent", 0.0, kProb),
+    spec<&Params::max_shop_visits_per_day>("max_shop_visits_per_day", 0.0, static_cast<double>(params::kShopsPerHousehold)),
+    spec<&Params::prob_price_search>("prob_price_search", 0.0, kProb),
+    spec<&Params::prob_quant_search>("prob_quant_search", 0.0, kProb),
+    spec<&Params::unemployed_reservation_cut>("unemployed_reservation_cut", 0.0, kProb),
+    spec<&Params::months_before_wage_cut>("months_before_wage_cut", 0.0, 240.0),
+    spec<&Params::wage_adjust_max>("wage_adjust_max", 0.0, kProb),
+    spec<&Params::inventory_upper_factor>("inventory_upper_factor", 0.0, 10.0),
+    spec<&Params::inventory_lower_factor>("inventory_lower_factor", 0.0, 10.0),
+    spec<&Params::price_upper_factor>("price_upper_factor", 0.0, 10.0),
+    spec<&Params::price_lower_factor>("price_lower_factor", 0.0, 10.0),
+    spec<&Params::price_adjust_max>("price_adjust_max", 0.0, kProb),
+    spec<&Params::price_change_prob>("price_change_prob", 0.0, kProb),
+    spec<&Params::productivity>("productivity", 0.0, 100.0),
+    spec<&Params::buffer_factor>("buffer_factor", 0.0, kProb),
+    spec<&Params::demand_satisfied_fraction>("demand_satisfied_fraction", 0.0, kProb),
+    spec<&Params::max_emergency_wage_cut>("max_emergency_wage_cut", 0.0, kProb),
+    spec<&Params::min_wage>("min_wage", 0.0, 1000.0),
 };
 
 }  // namespace
 
 std::span<const ParamSpec> param_specs() { return std::span<const ParamSpec>(kSpecs); }
+
+bool param_in_range(uint16_t param, double value) {
+    if (param >= std::size(kSpecs)) return false;
+    return value >= kSpecs[param].lo && value <= kSpecs[param].hi;
+}
 
 uint16_t find_param(std::string_view name) {
     for (uint16_t i = 0; i < std::size(kSpecs); ++i) {
@@ -94,6 +106,10 @@ void Log::set_param(int month, std::string_view name, double value) {
     const uint16_t id = find_param(name);
     if (id == kNoParam) {
         throw std::invalid_argument("intervention::Log::set_param: no such parameter");
+    }
+    if (!param_in_range(id, value)) {
+        throw std::out_of_range("intervention::Log::set_param: value outside the range of '" +
+                                std::string(name) + "'");
     }
     Intervention i;
     i.month = month;

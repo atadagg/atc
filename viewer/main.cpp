@@ -166,6 +166,7 @@ int main(int, char**) {
         draw_agents_panel(app);
         draw_dist_panel(app);
         draw_time_panel(app);
+        draw_steering_panel(app);
 
         ImGui::Render();
         SDL_RenderClear(renderer);

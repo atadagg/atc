@@ -34,6 +34,27 @@ def pearson(xs, ys):
     return cov / (sx * sy)
 
 
+def autocorr(xs, lag):
+    """Correlation of a series with itself `lag` months earlier."""
+    return pearson(xs[:-lag], xs[lag:])
+
+
+def excess_kurtosis(xs):
+    """Fourth moment less 3, so a normal distribution scores 0.
+
+    Real output growth is famously not normal: the distribution is tent-shaped,
+    with far more quiet months and far more violent ones than a bell curve
+    allows. A model reproducing that scores well above 0; one whose shocks are
+    just averaged noise scores near it.
+    """
+    m = mean(xs)
+    var = sum((x - m) ** 2 for x in xs) / len(xs)
+    if var == 0:
+        return float("nan")
+    fourth = sum((x - m) ** 4 for x in xs) / len(xs)
+    return fourth / (var * var) - 3.0
+
+
 def load(path):
     """Read the run CSV into a list of dicts of the columns the criteria need."""
     rows = []
@@ -72,6 +93,21 @@ def compute(rows):
     ]
     unemployment_tail = unemployment[1:]
 
+    # Output growth, month over month. `daily_capacity` is the recorded
+    # output rate, so its growth rate is the model's analogue of GDP growth.
+    capacity = [r["daily_capacity"] for r in rows]
+    output_growth = [
+        (capacity[i] - capacity[i - 1]) / capacity[i - 1]
+        for i in range(1, n) if capacity[i - 1] != 0.0
+    ]
+    # Okun's law relates output growth to the change in unemployment. In v1 it
+    # is an identity rather than a result: recorded output is lambda x employed
+    # and unemployment is 1 - employed/N, so the two series are the same
+    # variable rescaled and the correlation is mechanically -1. Kept, and
+    # printed with that caveat, because it stops being trivial the moment
+    # productivity varies -- multiple goods, capital, or firm-level lambda.
+    du = [unemployment[i] - unemployment[i - 1] for i in range(1, n)]
+
     tenth = max(1, n // 10)
     m_min, m_max = min(total_money), max(total_money)
 
@@ -92,6 +128,11 @@ def compute(rows):
         "money_min": m_min,
         "money_max": m_max,
         "money_spread": m_max - m_min,
+        "u_autocorr1": autocorr(unemployment, 1),
+        "u_autocorr6": autocorr(unemployment, 6),
+        "growth_sd": stdev(output_growth),
+        "growth_kurtosis": excess_kurtosis(output_growth),
+        "okun": pearson(output_growth, du[:len(output_growth)]),
     }
 
 
@@ -124,6 +165,19 @@ def main():
     print(f"  mean={c['gini_mean']:.4f}  (want > 0)")
     print(f"  early (first {c['gini_tenth']} months) = {c['gini_early']:.4f}, "
           f"late (last {c['gini_tenth']} months) = {c['gini_late']:.4f}  (want: no collapse to 0)")
+    print()
+
+    # --- Beyond the four criteria -------------------------------------------
+    # The four above can all be satisfied by an economy that is behaving
+    # nothing like a real one. These are the cheap additional questions.
+    print("Further checks (not v1 success criteria)")
+    print(f"  unemployment persistence: autocorr lag 1 = {c['u_autocorr1']:+.4f}, "
+          f"lag 6 = {c['u_autocorr6']:+.4f}  (want positive and decaying)")
+    print(f"  output growth: sd = {c['growth_sd']:.4f}, "
+          f"excess kurtosis = {c['growth_kurtosis']:+.3f}  (real economies: well above 0)")
+    print(f"  Okun (output growth vs change in unemployment) = {c['okun']:+.4f}  "
+          f"(an identity in v1 -- output IS employment; informative only once "
+          f"productivity varies)")
     print()
 
     # --- Money conservation across the whole run ---

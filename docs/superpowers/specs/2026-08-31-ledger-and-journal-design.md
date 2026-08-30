@@ -1,7 +1,8 @@
 # The financial substrate: ledger, journal, and intervention log
 
-Status: **All four parts implemented and merged.** What remains is the first
-consumer (viewer steering) and log serialization.
+Status: **Complete.** All four parts implemented and merged, along with the
+first consumer (viewer steering) and scenario save files. What remains is
+loading a scenario *inside* the viewer, which needs a `Sim` reset.
 
 ## Read this first, in plain language
 
@@ -437,10 +438,12 @@ Part 2 — the two are the same piece of arithmetic.
    `books_balance()` / `money_in_circulation()` split~~ — **done**
 5. ~~Part 4: `Intervention`, the log, and application at month open~~ — **done**
 6. ~~A scrub-across-an-intervention test~~ — **done**
-7. Viewer steering UI — the first consumer, and the reason the rest exists.
-8. Log serialization — a save file is (seed + log). `Intervention` is a plain
-   aggregate and parameters are addressed by name, so the design is ready;
-   the code is not written.
+7. ~~Viewer steering UI~~ — **done**. A slider *schedules* rather than applies:
+   the edit is logged for the month about to open, which is what keeps the
+   scrub honest. `App` moved into `viewer_core` so the flow is tested without
+   a window.
+8. ~~Log serialization~~ — **done**: `scenario.{hpp,cpp}`, `--scenario`, and a
+   save button. Loading inside the viewer still needs a `Sim` reset.
 
 The substrate is now bank-ready: an extension that creates money needs an
 issuer account and nothing else from this document.

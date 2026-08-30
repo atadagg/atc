@@ -36,6 +36,8 @@ add_library(viewer_core
     viewer/model_agents.cpp
     viewer/model_dist.cpp
     viewer/model_time.cpp
+    viewer/model_steering.cpp
+    viewer/app.cpp
 )
 target_link_libraries(viewer_core PUBLIC economy_core)
 target_include_directories(viewer_core PUBLIC viewer)
@@ -62,6 +64,8 @@ add_executable(economy_tests
     tests/test_viewer_cell.cpp
     tests/test_viewer_model_agents.cpp
     tests/test_viewer_model_views.cpp
+    tests/test_viewer_model_steering.cpp
+    tests/test_viewer_app.cpp
 )
 target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
 target_include_directories(economy_tests PRIVATE third_party)
@@ -101,10 +105,10 @@ if(ECONOMY_BUILD_VIEWER)
 
   add_executable(economy_viewer
       viewer/main.cpp
-      viewer/app.cpp
       viewer/panel_agents.cpp
       viewer/panel_dist.cpp
       viewer/panel_time.cpp
+      viewer/panel_steering.cpp
   )
   target_link_libraries(economy_viewer PRIVATE viewer_core imgui)
 endif()

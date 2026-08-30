@@ -33,6 +33,12 @@ struct ParamSpec {
     std::string_view name;
     void (*set)(Params&, double);
     double (*get)(const Params&);
+    // The range of values that mean anything. A probability above 1 is not
+    // merely unusual, it is nonsense, and a scenario file is hand-written --
+    // so the bound belongs with the parameter rather than in whichever UI
+    // happens to be drawing a slider. Inclusive at both ends.
+    double lo;
+    double hi;
 };
 
 std::span<const ParamSpec> param_specs();
@@ -60,6 +66,9 @@ struct Intervention {
     double value = 0.0;
 };
 
+// True if `value` is inside the parameter's meaningful range.
+bool param_in_range(uint16_t param, double value);
+
 // Applies one intervention. Journaling is passed through because an issuance
 // moves money and must appear in the book like any other movement.
 void apply(World& w, const Intervention& i, ledger::Journal* journal = nullptr);
@@ -72,6 +81,8 @@ class Log {
 public:
     const Intervention& add(Intervention i);
 
+    // Throws std::invalid_argument for an unknown name, std::out_of_range for
+    // a value outside the parameter's range.
     void set_param(int month, std::string_view name, double value);
     void issue(int month, uint32_t issuer, uint32_t household, double amount);
     void issue_to_all_households(int month, uint32_t issuer, double each);

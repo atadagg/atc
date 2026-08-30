@@ -3,15 +3,27 @@
 #include <cstdint>
 #include <vector>
 
+#include <string>
+
 #include "agents.hpp"
 #include "cell.hpp"
+#include "intervention.hpp"
 #include "ring_recorder.hpp"
 #include "sim.hpp"
 
 // All viewer state. Holds no graphics types, so it can be reasoned about
 // (and later tested) without a window.
 struct App {
-    explicit App(uint64_t seed) : sim(seed) {}
+    explicit App(uint64_t seed) : sim(seed, &log) {}
+
+    // Declared before `sim` on purpose: members initialize in declaration
+    // order, and Sim is constructed with a pointer to this log.
+    //
+    // The log is what makes steering possible without breaking determinism --
+    // a run is (seed + log), so a parameter changed from the UI is replayed
+    // identically when the timeline is scrubbed back through it. Append only
+    // between steps: `Log::due` hands out a span into its storage.
+    intervention::Log log;
 
     Sim sim;
     RingRecorder metrics{4096};
@@ -31,6 +43,11 @@ struct App {
 
     Filters filters;
 
+    // Where the steering panel writes a scenario. A save is (seed + log), so
+    // it is a few lines of text rather than a state dump.
+    std::string scenario_path = "output/scenario.txt";
+    std::string scenario_status;
+
     // Steps the simulation if running, recording each month's metrics.
     void advance();
 
@@ -44,3 +61,4 @@ struct App {
 void draw_agents_panel(App& app);
 void draw_dist_panel(App& app);
 void draw_time_panel(App& app);
+void draw_steering_panel(App& app);

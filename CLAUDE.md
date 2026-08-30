@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 195 cases
+./build/economy_tests                              # 204 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 
@@ -106,7 +106,8 @@ having run straight there. Testable viewer logic — `Sim`'s snapshot/seek,
 ImGui panels, and is covered by `tests/test_viewer_*.cpp`.
 
 What the viewer *shows* is decided in a view-model layer (`viewer/cell.hpp`,
-`model_agents`, `model_dist`, `model_time`), separate from how it is drawn.
+`model_agents`, `model_dist`, `model_time`, `model_steering`), separate from
+how it is drawn.
 Panels render `Cell`s and never reach into `Firm`/`Household` themselves:
 filters, sorting, the column schema, the detail panel's link graph and the
 scrub bounds are all display-independent and tested without a window. A
@@ -119,13 +120,29 @@ employer. Line grouping and label wording stay in the panel — those are
 display concerns. See
 `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md`.
 
-Steering (live parameter mutation from the UI) is deliberately not
-implemented: `params.hpp`
-is `constexpr`, and mutating simulation parameters mid-run needs its own
-answer for determinism (an intervention log, most likely) before it can be
-built without quietly breaking invariant 2. That log is now specified and
-promoted ahead of the §8 extensions — see Next work, and
-`docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`.
+**Steering is implemented** (`panel_steering.cpp` + `model_steering`). Sliders
+for all 21 behavioural parameters, a button that issues money to every
+household, the audit trail of what has been done, and a scenario save.
+
+The rule that makes it safe: a slider **schedules** rather than applies. The
+edit is appended to `App::log` for the month about to open, and takes effect
+there, before any agent acts. So the slider keeps reading the value the
+simulation is actually using until the month turns — which looks like a bug and
+is not, and the panel says so on screen. This is what keeps invariant 2 intact:
+the run is (seed + log), so scrubbing back through a change and forward again
+replays it identically.
+
+Committing happens on `IsItemDeactivatedAfterEdit`, not per frame — a drag
+would otherwise append hundreds of interventions for one gesture.
+
+`App` holds no graphics types and lives in `viewer_core`, so the steering flow
+is tested without a window (`tests/test_viewer_app.cpp`): scheduled-not-applied,
+scrub-back-through-a-change, issuance expanding the supply while the books stay
+flat. The panels themselves remain untested; they only draw.
+
+Loading a scenario is CLI-only (`--scenario`) — the viewer can save but not
+load, because `Sim` takes its log at construction and reloading means
+restarting the run.
 
 ## Architecture
 
@@ -141,7 +158,7 @@ promoted ahead of the §8 extensions — see Next work, and
 | `household_decisions.{hpp,cpp}` | Monthly: shop search, job search, consumption budget |
 | `daily.{hpp,cpp}` | Daily: shopping, then production |
 | `month_close.{hpp,cpp}` | Wages, profits, reservation wages, deferred fires, demand rollover |
-| `intervention.{hpp,cpp}` | The intervention log: `Params` table, `Intervention`, `Log`, `apply` |
+| `intervention.{hpp,cpp}` | The intervention log: `Params` table (name, accessors, valid range), `Intervention`, `Log`, `apply` |
 | `scenario.{hpp,cpp}` | `Scenario` = seed + log; stream read/write. Streams, not paths — the core opens no files. |
 | `scheduler.{hpp,cpp}` | The day/month tick; applies due interventions at month open |
 | `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Also `CsvJournal`, the ledger's file sink. |
@@ -251,7 +268,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 195 tests, 437,268 assertions.
+v1 complete and merged. 204 tests, 437,349 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -439,6 +456,18 @@ Measured end to end with `scenarios/stimulus.scenario`: circulation steps
 100,000 → 150,000 at the scheduled month, the books stay flat to 3e-9, and
 unemployment drops from ~1.9% to ~0% over the following two months. Without a
 scenario the reference run is byte-identical.
+
+### Done: viewer steering, and parameter ranges
+
+Each `ParamSpec` now carries the range of values that **mean** anything — a
+probability above 1 is nonsense, not merely unusual — and `Log::set_param`
+rejects anything outside it. The bound belongs with the parameter rather than
+with whichever UI is drawing a slider: a scenario file is hand-written, and
+that is where a typo lands.
+
+The steering panel is the first consumer of the whole substrate. See the Viewer
+section for the scheduled-not-applied rule and why the slider appears to snap
+back.
 
 ### Measured performance baseline
 
@@ -685,10 +714,10 @@ the `constexpr`/`Params` split, issuers with enforced solvency, and the
 intervention log. The substrate is bank-ready: an extension that creates money
 needs an issuer account and nothing else from that document. What remains:
 
-- **Viewer steering UI** (spec step 7) — the first consumer, and the reason
-  the rest exists. The substrate side is done: the panel needs to append to an
-  `intervention::Log` the `Sim` already holds, and re-seek so the change takes
-  effect at a month boundary.
+- ~~**Viewer steering UI**~~ — **done**, see the Viewer section.
+- **Loading a scenario in the viewer.** `Sim` takes its log at construction,
+  so this means a `Sim::reset(seed, log)` and clearing the snapshot history.
+  Small, but it is a new entry point into the run and deserves its own tests.
 - ~~**Log serialization**~~ — **done**: `scenario.{hpp,cpp}`, `--scenario`.
 
 ### Extensions, in dependency order
@@ -773,3 +802,7 @@ Real but judged not worth fixing yet. Reconsider when touching that code.
   compile. `constexpr` shared label constants would make it a build error.
 - The scrub bar's call site (`scrub_bounds(app.max_month)`) is not itself
   unit-tested — panels need a window. The rule it encodes is tested.
+- `App::log` is appended to from the panel while `Sim` holds a `const Log*`,
+  and `Log::due` hands out a span into the log's storage. Safe today because
+  appends happen between steps on one thread; it would not survive stepping the
+  simulation off the UI thread.
