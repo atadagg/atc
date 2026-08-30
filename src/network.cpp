@@ -49,4 +49,22 @@ uint32_t random_unconnected_firm_by_size(const World& w, uint32_t household, Rng
     return NO_FIRM;  // unreachable except for floating-point edge cases
 }
 
+uint32_t random_unconnected_firm(const World& w, uint32_t household, Rng& rng) {
+    const Household& h = w.households[household];
+
+    uint32_t n = 0;
+    for (uint32_t f = 0; f < w.firms.size(); ++f) {
+        if (!has_shop(h, f)) ++n;
+    }
+    if (n == 0) return NO_FIRM;
+
+    uint32_t pick = rng.index(n);
+    for (uint32_t f = 0; f < w.firms.size(); ++f) {
+        if (has_shop(h, f)) continue;
+        if (pick == 0) return f;
+        --pick;
+    }
+    return NO_FIRM;  // unreachable
+}
+
 }  // namespace network
