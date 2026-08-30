@@ -82,3 +82,36 @@ void CsvRecorder::record(const Metrics& m) {
          << m.planned_consumption << ',' << m.inventory << ','
          << m.household_liquidity << '\n';
 }
+
+namespace {
+
+const char* kind_name(ledger::Kind k) {
+    return k == ledger::Kind::Firm ? "firm" : "household";
+}
+
+const char* reason_name(ledger::Reason r) {
+    switch (r) {
+        case ledger::Reason::Purchase: return "purchase";
+        case ledger::Reason::Wage:     return "wage";
+        case ledger::Reason::Profit:   return "profit";
+        case ledger::Reason::Unspecified: break;
+    }
+    return "unspecified";
+}
+
+}  // namespace
+
+CsvJournal::CsvJournal(const std::string& path) : out_(path) {
+    if (!out_.is_open()) {
+        throw std::runtime_error("CsvJournal: cannot open output file: " + path);
+    }
+    out_ << std::setprecision(15);
+    out_ << "month,day,seq,from_kind,from_index,to_kind,to_index,amount,reason\n";
+}
+
+void CsvJournal::append(const ledger::Entry& e) {
+    out_ << e.month << ',' << e.day << ',' << e.seq << ','
+         << kind_name(e.from.kind) << ',' << e.from.index << ','
+         << kind_name(e.to.kind) << ',' << e.to.index << ','
+         << e.amount << ',' << reason_name(e.reason) << '\n';
+}

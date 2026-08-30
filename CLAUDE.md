@@ -121,7 +121,7 @@ promoted ahead of the §8 extensions — see Next work, and
 | `params.hpp` | All constants. Split into published calibration vs. invented initial conditions — respect that boundary. |
 | `agents.hpp` | `Firm` and `Household` plain structs, `NO_FIRM`/`NO_HOUSEHOLD` sentinel |
 | `world.{hpp,cpp}` | Owns the agent arrays; `total_money()` |
-| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write `liquidity` |
+| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write `liquidity`; `Journal`, `Entry`, `Reason` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
 | `network.{hpp,cpp}` | Household↔firm links (employment, shop connections) |
 | `firm_decisions.{hpp,cpp}` | Monthly: wage, hire/fire, price |
@@ -129,7 +129,7 @@ promoted ahead of the §8 extensions — see Next work, and
 | `daily.{hpp,cpp}` | Daily: shopping, then production |
 | `month_close.{hpp,cpp}` | Wages, profits, reservation wages, deferred fires, demand rollover |
 | `scheduler.{hpp,cpp}` | The day/month tick |
-| `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. |
+| `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Also `CsvJournal`, the ledger's file sink. |
 | `main.cpp` | CLI. The only file permitted console I/O. |
 
 Analysis lives in `scripts/`: `validate.py` (criteria math, stdlib),
@@ -251,8 +251,42 @@ sites are migrated: `daily::shop`, `month_close::pay_wages`,
 `transfer` — that is a caller policy, and credit will introduce accounts that
 legitimately go negative.
 
-This is the chokepoint, **not yet the journal**. Balances still have no
-recorded history; entries behind `Recorder` are step 2 and still open.
+### Done: journaling (step 2 of the ledger spec)
+
+`transfer` takes an optional `Reason` and `ledger::Journal*`. A non-null
+journal receives one `Entry` per movement — `{month, day, seq, from, to,
+amount, reason}` — *after* the movement succeeds, so a rejected transfer
+records nothing. `seq` is monotonic over the whole run and gives every entry
+a total order. `day` is `ledger::kMonthClose` (−1) for wages and profits,
+which move outside any day.
+
+The clock is stamped by the scheduler (`Journal::set_time`), not by
+`transfer` — `transfer` does not know what day it is, and should not.
+`Scheduler::set_journal` attaches and detaches between months.
+
+`Journal` is **not** part of `World`, and therefore not part of
+`SimSnapshot`: a journal is an output, and outputs go through a sink the core
+does not own (invariant 5). `VectorJournal` (in-memory, for tests) lives in
+`ledger`; `CsvJournal` (the I/O half) lives in `recorder`.
+
+Journaling off leaves the run **byte-identical** — verified over the full
+6000-month reference run.
+
+```bash
+./build/economy --seed 1 --burn-in 50 --months 2 \
+    --out output/run.csv --journal output/journal.csv --journal-months 1
+```
+
+Journaling defaults to a **one-month window** and never covers the burn-in,
+for a reason worth knowing before you widen it: a single month of the
+reference population produced 122,174 entries, and **100,000 of them were
+profit distributions**. `distribute_profits` pays every firm's profit to every
+household, so it is O(firms x households) per month — 100 x 1000 — against
+~21,000 purchases and ~1,000 wage payments. Journaling 6000 months means
+~700M rows. Journal a window.
+
+That ratio is itself a finding: almost all recorded money movement in this
+economy is the ownership proxy, not trade.
 
 **The reference baseline moved, and this is why.** The spec's acceptance test
 was byte-identical output. It is not byte-identical, for a reason that is

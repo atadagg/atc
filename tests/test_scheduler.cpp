@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "ledger.hpp"
 #include "scheduler.hpp"
 #include "world.hpp"
 #include "params.hpp"
@@ -137,4 +138,89 @@ TEST_CASE("post-burn-in behaviour does not depend on the initial network") {
     // comfortably above the ~0.05pp gap actually observed, but is now within
     // the variable's real range, so a genuine dependence would trip it.
     CHECK(std::abs(a - b) < 0.01);
+}
+
+TEST_CASE("a journaled month records purchases, wages and profits") {
+    Rng rng(1);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    ledger::VectorJournal j;
+    Scheduler s(w, rng, &j);
+    s.run_month();
+
+    CHECK(!j.entries.empty());
+    bool saw_purchase = false, saw_wage = false, saw_profit = false;
+    for (const auto& e : j.entries) {
+        CHECK(e.amount >= 0.0);
+        if (e.reason == ledger::Reason::Purchase) {
+            saw_purchase = true;
+            CHECK(e.day >= 0);
+        }
+        if (e.reason == ledger::Reason::Wage) {
+            saw_wage = true;
+            CHECK(e.day == ledger::kMonthClose);
+        }
+        if (e.reason == ledger::Reason::Profit) saw_profit = true;
+    }
+    CHECK(saw_purchase);
+    CHECK(saw_wage);
+    CHECK(saw_profit);
+}
+
+TEST_CASE("the journal accounts for every change in a household's balance") {
+    Rng rng(7);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    ledger::VectorJournal j;
+    Scheduler s(w, rng, &j);
+
+    const uint32_t who = 42;
+    double opening = w.households[who].liquidity;
+    s.run_month();
+
+    double net = 0.0;
+    for (const auto& e : j.entries) {
+        if (e.from.kind == ledger::Kind::Household && e.from.index == who) net -= e.amount;
+        if (e.to.kind == ledger::Kind::Household && e.to.index == who) net += e.amount;
+    }
+    CHECK(opening + net == doctest::Approx(w.households[who].liquidity));
+}
+
+TEST_CASE("journaling does not change the simulation") {
+    Rng r1(3);
+    World plain(params::kNumHouseholds, params::kNumFirms, r1);
+    Scheduler s1(plain, r1);
+
+    Rng r2(3);
+    World booked(params::kNumHouseholds, params::kNumFirms, r2);
+    ledger::VectorJournal j;
+    Scheduler s2(booked, r2, &j);
+
+    for (int i = 0; i < 12; ++i) { s1.run_month(); s2.run_month(); }
+
+    for (size_t i = 0; i < plain.households.size(); ++i) {
+        CHECK(plain.households[i].liquidity == booked.households[i].liquidity);
+    }
+    for (size_t i = 0; i < plain.firms.size(); ++i) {
+        CHECK(plain.firms[i].liquidity == booked.firms[i].liquidity);
+        CHECK(plain.firms[i].wage == booked.firms[i].wage);
+        CHECK(plain.firms[i].price == booked.firms[i].price);
+    }
+}
+
+TEST_CASE("the journal can be attached and detached mid-run") {
+    Rng rng(9);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    ledger::VectorJournal j;
+    Scheduler s(w, rng);
+
+    s.run_month();
+    CHECK(j.entries.empty());
+
+    s.set_journal(&j);
+    s.run_month();
+    size_t after_one = j.entries.size();
+    CHECK(after_one > 0);
+
+    s.set_journal(nullptr);
+    s.run_month();
+    CHECK(j.entries.size() == after_one);
 }

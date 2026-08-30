@@ -25,9 +25,11 @@ void Scheduler::run_month() {
     settle_vacancy_bookkeeping();
 
     for (int day = 0; day < params::kDaysPerMonth; ++day) {
-        daily::run_day(world_, rng_);
+        if (journal_) journal_->set_time(months_elapsed_, day);
+        daily::run_day(world_, rng_, journal_);
     }
 
-    month_close::run(world_);
+    if (journal_) journal_->set_time(months_elapsed_, ledger::kMonthClose);
+    month_close::run(world_, journal_);
     ++months_elapsed_;
 }

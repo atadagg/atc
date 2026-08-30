@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "params.hpp"
+#include "ledger.hpp"
 #include "recorder.hpp"
 #include "rng.hpp"
 #include "scheduler.hpp"
@@ -34,6 +35,11 @@ int main(int argc, char** argv) {
     int months = params::kMeasurementMonths;
     int burn_in = params::kBurnInMonths;
     std::string out_path = "output/run.csv";
+    std::string journal_path;
+    // A journal row per movement of money is roughly a million rows a month
+    // at the reference population, so journaling defaults to a one-month
+    // window rather than the whole run.
+    int journal_months = 1;
 
     for (int i = 1; i < argc; i += 2) {
         std::string_view flag(argv[i]);
@@ -66,6 +72,17 @@ int main(int argc, char** argv) {
             burn_in = static_cast<int>(*v);
         } else if (flag == "--out") {
             out_path = std::string(value);
+        } else if (flag == "--journal") {
+            journal_path = std::string(value);
+        } else if (flag == "--journal-months") {
+            auto v = parse_long(value);
+            if (!v || *v < 0) {
+                std::println(stderr,
+                             "error: --journal-months expects a non-negative integer, got '{}'",
+                             value);
+                return 1;
+            }
+            journal_months = static_cast<int>(*v);
         } else {
             std::println(stderr, "error: unrecognized flag '{}'", flag);
             return 1;
@@ -88,9 +105,25 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    std::unique_ptr<CsvJournal> journal;
+    if (!journal_path.empty()) {
+        try {
+            journal = std::make_unique<CsvJournal>(journal_path);
+        } catch (const std::runtime_error& e) {
+            std::println(stderr, "error: could not open journal path '{}': {}",
+                         journal_path, e.what());
+            return 1;
+        }
+        std::println("journaling the first {} measurement month(s) to {}",
+                     journal_months, journal_path);
+    }
+
+    // Never journal the burn-in: it is thrown away, and it is the bulk of
+    // the movements.
     for (int m = 0; m < burn_in; ++m) scheduler.run_month();
 
     for (int m = 0; m < months; ++m) {
+        scheduler.set_journal(m < journal_months ? journal.get() : nullptr);
         scheduler.run_month();
         recorder->record(compute_metrics(world, m));
     }

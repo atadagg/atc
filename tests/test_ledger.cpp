@@ -84,3 +84,80 @@ TEST_CASE("an out-of-range account index is rejected") {
     CHECK_THROWS_AS(ledger::transfer(w, ledger::firm(0), ledger::firm(99), 1.0),
                     std::out_of_range);
 }
+
+// --- journaling -----------------------------------------------------------
+//
+// The chokepoint only guarantees conservation. Journaling is what turns
+// balances into a book: every movement recorded with its source, sink,
+// reason and place in time. It is opt-in because the reference run makes
+// millions of transfers.
+
+TEST_CASE("a transfer without a journal records nothing") {
+    Rng rng(10);
+    World w = tiny_world(rng);
+    ledger::VectorJournal j;
+    ledger::transfer(w, ledger::household(0), ledger::firm(0), 1.0);
+    CHECK(j.entries.empty());
+}
+
+TEST_CASE("a journaled transfer records source, sink, amount and reason") {
+    Rng rng(11);
+    World w = tiny_world(rng);
+    ledger::VectorJournal j;
+    ledger::transfer(w, ledger::household(2), ledger::firm(1), 7.5,
+                     ledger::Reason::Purchase, &j);
+
+    REQUIRE(j.entries.size() == 1);
+    const ledger::Entry& e = j.entries[0];
+    CHECK(e.from.kind == ledger::Kind::Household);
+    CHECK(e.from.index == 2);
+    CHECK(e.to.kind == ledger::Kind::Firm);
+    CHECK(e.to.index == 1);
+    CHECK(e.amount == doctest::Approx(7.5));
+    CHECK(e.reason == ledger::Reason::Purchase);
+}
+
+TEST_CASE("entries carry the time the journal was last told about") {
+    Rng rng(12);
+    World w = tiny_world(rng);
+    ledger::VectorJournal j;
+
+    j.set_time(4, 9);
+    ledger::transfer(w, ledger::household(0), ledger::firm(0), 1.0,
+                     ledger::Reason::Purchase, &j);
+    j.set_time(4, ledger::kMonthClose);
+    ledger::transfer(w, ledger::firm(0), ledger::household(0), 1.0,
+                     ledger::Reason::Wage, &j);
+
+    REQUIRE(j.entries.size() == 2);
+    CHECK(j.entries[0].month == 4);
+    CHECK(j.entries[0].day == 9);
+    CHECK(j.entries[1].month == 4);
+    CHECK(j.entries[1].day == ledger::kMonthClose);
+}
+
+TEST_CASE("seq gives every entry a total order across the whole run") {
+    Rng rng(13);
+    World w = tiny_world(rng);
+    ledger::VectorJournal j;
+    for (int i = 0; i < 5; ++i) {
+        j.set_time(i, 0);
+        ledger::transfer(w, ledger::household(0), ledger::firm(0), 0.5,
+                         ledger::Reason::Purchase, &j);
+    }
+    REQUIRE(j.entries.size() == 5);
+    for (size_t i = 1; i < j.entries.size(); ++i) {
+        CHECK(j.entries[i].seq > j.entries[i - 1].seq);
+    }
+}
+
+TEST_CASE("a rejected transfer records nothing") {
+    Rng rng(14);
+    World w = tiny_world(rng);
+    ledger::VectorJournal j;
+    CHECK_THROWS(ledger::transfer(w, ledger::household(0), ledger::firm(0), -1.0,
+                                  ledger::Reason::Purchase, &j));
+    CHECK_THROWS(ledger::transfer(w, ledger::household(99), ledger::firm(0), 1.0,
+                                  ledger::Reason::Purchase, &j));
+    CHECK(j.entries.empty());
+}

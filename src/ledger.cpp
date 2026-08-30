@@ -19,7 +19,8 @@ double& liquidity_of(World& w, Account a) {
 
 }  // namespace
 
-void transfer(World& w, Account from, Account to, double amount) {
+void transfer(World& w, Account from, Account to, double amount, Reason reason,
+              Journal* journal) {
     if (!std::isfinite(amount) || amount < 0.0) {
         throw std::invalid_argument("ledger::transfer: amount must be finite and non-negative");
     }
@@ -27,6 +28,7 @@ void transfer(World& w, Account from, Account to, double amount) {
     double& dst = liquidity_of(w, to);
     src -= amount;
     dst += amount;
+    if (journal) journal->record(from, to, amount, reason);
 }
 
 }  // namespace ledger

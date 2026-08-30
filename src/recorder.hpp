@@ -3,6 +3,8 @@
 #include <fstream>
 #include <string>
 
+#include "ledger.hpp"
+
 class World;
 
 struct Metrics {
@@ -40,6 +42,23 @@ class CsvRecorder : public Recorder {
 public:
     explicit CsvRecorder(const std::string& path);
     void record(const Metrics& m) override;
+
+private:
+    std::ofstream out_;
+};
+
+// The journal's file sink: one row per movement of money. This is the
+// I/O half of the ledger, so it lives here rather than in `ledger` --
+// the core does I/O only through this file (invariant 5).
+//
+// A row per movement is a lot of rows: roughly a million a month at the
+// reference population. Journal a window, not a 6000-month run.
+class CsvJournal : public ledger::Journal {
+public:
+    explicit CsvJournal(const std::string& path);
+
+protected:
+    void append(const ledger::Entry& e) override;
 
 private:
     std::ofstream out_;

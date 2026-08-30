@@ -1,4 +1,5 @@
 #include "doctest.h"
+#include "ledger.hpp"
 #include "recorder.hpp"
 #include "network.hpp"
 #include "world.hpp"
@@ -179,4 +180,35 @@ TEST_CASE("precision retention for high-precision values") {
 
 TEST_CASE("csv recorder throws when output directory does not exist") {
     CHECK_THROWS_AS([]{ CsvRecorder("no_such_dir_xyz/out.csv"); }(), std::runtime_error);
+}
+
+TEST_CASE("csv journal writes a header and one row per movement") {
+    const std::string path = "test_journal.csv";
+    std::remove(path.c_str());
+    Rng rng(1);
+    World w(10, 4, rng);
+    {
+        CsvJournal j(path);
+        j.set_time(3, 5);
+        ledger::transfer(w, ledger::household(1), ledger::firm(2), 12.5,
+                         ledger::Reason::Purchase, &j);
+        j.set_time(3, ledger::kMonthClose);
+        ledger::transfer(w, ledger::firm(2), ledger::household(1), 4.0,
+                         ledger::Reason::Wage, &j);
+    }
+
+    std::ifstream in(path);
+    REQUIRE(in.is_open());
+    std::string header, first, second;
+    std::getline(in, header);
+    std::getline(in, first);
+    std::getline(in, second);
+    CHECK(header == "month,day,seq,from_kind,from_index,to_kind,to_index,amount,reason");
+    CHECK(first == "3,5,0,household,1,firm,2,12.5,purchase");
+    CHECK(second == "3,-1,1,firm,2,household,1,4,wage");
+    std::remove(path.c_str());
+}
+
+TEST_CASE("csv journal refuses an unopenable path") {
+    CHECK_THROWS_AS(CsvJournal("no/such/directory/journal.csv"), std::runtime_error);
 }

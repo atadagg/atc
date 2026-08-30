@@ -10,7 +10,7 @@
 
 namespace month_close {
 
-void pay_wages(World& w) {
+void pay_wages(World& w, ledger::Journal* journal) {
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
         Firm& f = w.firms[fi];
         double headcount = static_cast<double>(f.employees.size());
@@ -45,12 +45,13 @@ void pay_wages(World& w) {
         // machine-epsilon residue instead of exactly zero. That is a rounding
         // remainder, not unpaid wages, and no money is created or destroyed.
         for (uint32_t h : f.employees) {
-            ledger::transfer(w, ledger::firm(fi), ledger::household(h), per_worker);
+            ledger::transfer(w, ledger::firm(fi), ledger::household(h), per_worker,
+                             ledger::Reason::Wage, journal);
         }
     }
 }
 
-void distribute_profits(World& w) {
+void distribute_profits(World& w, ledger::Journal* journal) {
     // Ownership proxy: profit shares are proportional to household liquidity,
     // so the wealthy receive more. This is the model's inequality engine.
     // Capture liquidity before any distributions to avoid over-distribution.
@@ -72,12 +73,14 @@ void distribute_profits(World& w) {
             // Degenerate case: split evenly rather than destroying money.
             double share = profit / static_cast<double>(w.households.size());
             for (uint32_t i = 0; i < w.households.size(); ++i) {
-                ledger::transfer(w, ledger::firm(fi), ledger::household(i), share);
+                ledger::transfer(w, ledger::firm(fi), ledger::household(i), share,
+                                 ledger::Reason::Profit, journal);
             }
         } else {
             for (uint32_t i = 0; i < w.households.size(); ++i) {
                 ledger::transfer(w, ledger::firm(fi), ledger::household(i),
-                                 profit * (initial_liquidity[i] / total_household_liquidity));
+                                 profit * (initial_liquidity[i] / total_household_liquidity),
+                                 ledger::Reason::Profit, journal);
             }
         }
     }
@@ -118,9 +121,9 @@ void roll_demand(World& w) {
     }
 }
 
-void run(World& w) {
-    pay_wages(w);
-    distribute_profits(w);
+void run(World& w, ledger::Journal* journal) {
+    pay_wages(w, journal);
+    distribute_profits(w, journal);
     update_reservation_wages(w);
     apply_pending_fires(w);
     roll_demand(w);

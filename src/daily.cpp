@@ -13,7 +13,7 @@
 
 namespace daily {
 
-void shop(World& w, uint32_t household, Rng& rng) {
+void shop(World& w, uint32_t household, Rng& rng, ledger::Journal* journal) {
     Household& h = w.households[household];
 
     double target = h.planned_consumption / params::kDaysPerMonth;
@@ -53,7 +53,8 @@ void shop(World& w, uint32_t household, Rng& rng) {
             // Clamp the cost to available liquidity so floating-point division
             // can never push the household slightly negative.
             double cost = std::min(bought * f.price, h.liquidity);
-            ledger::transfer(w, ledger::household(household), ledger::firm(firm_idx), cost);
+            ledger::transfer(w, ledger::household(household), ledger::firm(firm_idx), cost,
+                             ledger::Reason::Purchase, journal);
             f.inventory -= bought;
             remaining -= bought;
         }
@@ -77,12 +78,12 @@ void produce(World& w) {
     }
 }
 
-void run_day(World& w, Rng& rng) {
+void run_day(World& w, Rng& rng, ledger::Journal* journal) {
     std::vector<uint32_t> order(w.households.size());
     std::iota(order.begin(), order.end(), 0u);
     rng.shuffle(order);
 
-    for (uint32_t h : order) shop(w, h, rng);
+    for (uint32_t h : order) shop(w, h, rng, journal);
     produce(w);
 }
 
