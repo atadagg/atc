@@ -11,9 +11,22 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 189 cases
+./build/economy_tests                              # 195 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
+
+./build/economy --scenario scenarios/stimulus.scenario --out output/s.csv
+```
+
+A **scenario** is a save file and a reproducible experiment: `(seed +
+intervention log)`, a few lines of text rather than a state dump. `--scenario`
+loads one; an explicit `--seed` overrides the file's. `scenarios/stimulus.scenario`
+is the worked example — one line creates money and the CLI then reports the two
+numbers separately:
+
+```
+books  start=100000 end=100000 drift=0.000000002  (must be flat)
+supply start=100000 end=150000 issued=50000.000000
 ```
 
 `scripts/plot.py` needs matplotlib + pandas. There is no system `pip` module,
@@ -129,6 +142,7 @@ promoted ahead of the §8 extensions — see Next work, and
 | `daily.{hpp,cpp}` | Daily: shopping, then production |
 | `month_close.{hpp,cpp}` | Wages, profits, reservation wages, deferred fires, demand rollover |
 | `intervention.{hpp,cpp}` | The intervention log: `Params` table, `Intervention`, `Log`, `apply` |
+| `scenario.{hpp,cpp}` | `Scenario` = seed + log; stream read/write. Streams, not paths — the core opens no files. |
 | `scheduler.{hpp,cpp}` | The day/month tick; applies due interventions at month open |
 | `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Also `CsvJournal`, the ledger's file sink. |
 | `main.cpp` | CLI. The only file permitted console I/O. |
@@ -237,7 +251,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 189 tests, 437,164 assertions.
+v1 complete and merged. 195 tests, 437,268 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -395,6 +409,36 @@ forward to 80 again, and the state is **byte-identical** to the first pass.
 
 No interventions leaves the reference run byte-identical, at 13.3 s. (Discard
 the first timed run after a rebuild — it reads ~18 s cold.)
+
+### Done: scenarios as save files
+
+`Scenario` is `(seed + intervention log)` and `scenario::read`/`write` move it
+through a **stream, never a path** — the core opens no files (invariant 5), so
+`main` and the viewer own the handle and the parser is testable without disk.
+
+The format is one record per line, `#` comments allowed, and it stays readable
+a year later because parameters are addressed by **name**:
+
+```
+economy-scenario 1
+seed 1
+3000 issue_all 0 50
+```
+
+Parsing is deliberately strict — unknown parameter, unknown action, wrong
+arity, bad number, unknown version all throw rather than being skipped. A
+scenario silently half-read is a run that is not the run anyone asked for, and
+this is a reproducibility tool.
+
+**`seq` is renumbered on read.** The file is written in `(month, seq)` order and
+re-read in that order, so intra-month order — the only kind that decides
+anything — survives, while absolute `seq` values need not match. There is a test
+pinning exactly this.
+
+Measured end to end with `scenarios/stimulus.scenario`: circulation steps
+100,000 → 150,000 at the scheduled month, the books stay flat to 3e-9, and
+unemployment drops from ~1.9% to ~0% over the following two months. Without a
+scenario the reference run is byte-identical.
 
 ### Measured performance baseline
 
@@ -645,9 +689,7 @@ needs an issuer account and nothing else from that document. What remains:
   the rest exists. The substrate side is done: the panel needs to append to an
   `intervention::Log` the `Sim` already holds, and re-seek so the change takes
   effect at a month boundary.
-- **Log serialization** — not built. `Intervention` is a plain aggregate and
-  parameters are addressed by *name*, so a save file is a small matter of
-  writing the log out; the design is ready for it, the code is not.
+- ~~**Log serialization**~~ — **done**: `scenario.{hpp,cpp}`, `--scenario`.
 
 ### Extensions, in dependency order
 

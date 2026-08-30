@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <fstream>
 #include <optional>
 #include <print>
 #include <stdexcept>
@@ -11,6 +12,7 @@
 #include "params.hpp"
 #include "ledger.hpp"
 #include "recorder.hpp"
+#include "scenario.hpp"
 #include "rng.hpp"
 #include "scheduler.hpp"
 #include "world.hpp"
@@ -32,6 +34,7 @@ std::optional<long> parse_long(std::string_view s) {
 
 int main(int argc, char** argv) {
     uint64_t seed = 1;
+    bool seed_given = false;
     int months = params::kMeasurementMonths;
     int burn_in = params::kBurnInMonths;
     std::string out_path = "output/run.csv";
@@ -40,6 +43,7 @@ int main(int argc, char** argv) {
     // at the reference population, so journaling defaults to a one-month
     // window rather than the whole run.
     int journal_months = 1;
+    std::string scenario_path;
 
     for (int i = 1; i < argc; i += 2) {
         std::string_view flag(argv[i]);
@@ -56,6 +60,7 @@ int main(int argc, char** argv) {
                 return 1;
             }
             seed = static_cast<uint64_t>(*v);
+            seed_given = true;
         } else if (flag == "--months") {
             auto v = parse_long(value);
             if (!v) {
@@ -72,6 +77,8 @@ int main(int argc, char** argv) {
             burn_in = static_cast<int>(*v);
         } else if (flag == "--out") {
             out_path = std::string(value);
+        } else if (flag == "--scenario") {
+            scenario_path = std::string(value);
         } else if (flag == "--journal") {
             journal_path = std::string(value);
         } else if (flag == "--journal-months") {
@@ -89,13 +96,35 @@ int main(int argc, char** argv) {
         }
     }
 
+    // A scenario carries its own seed, so it is loaded before the RNG exists.
+    // An explicit --seed after --scenario still wins: the flag is applied last.
+    Scenario scenario;
+    if (!scenario_path.empty()) {
+        std::ifstream in(scenario_path);
+        if (!in) {
+            std::println(stderr, "error: cannot open scenario '{}'", scenario_path);
+            return 1;
+        }
+        try {
+            scenario = scenario::read(in);
+        } catch (const std::runtime_error& e) {
+            std::println(stderr, "error: {}", e.what());
+            return 1;
+        }
+        if (!seed_given) seed = scenario.seed;
+        std::println("scenario={} interventions={}", scenario_path,
+                     scenario.log.all().size());
+    }
+
     std::println("seed={} burn_in={} months={} out={}", seed, burn_in, months, out_path);
 
     Rng rng(seed);
     World world(params::kNumHouseholds, params::kNumFirms, rng);
     Scheduler scheduler(world, rng);
+    if (!scenario.log.empty()) scheduler.set_interventions(&scenario.log);
 
-    const double money_at_start = world.books_balance();
+    const double books_at_start = world.books_balance();
+    const double circulation_at_start = world.money_in_circulation();
 
     std::unique_ptr<CsvRecorder> recorder;
     try {
@@ -128,9 +157,16 @@ int main(int argc, char** argv) {
         recorder->record(compute_metrics(world, m));
     }
 
-    const double money_at_end = world.books_balance();
-    std::println("money start={:.6f} end={:.6f} drift={:.9f}",
-                 money_at_start, money_at_end, money_at_end - money_at_start);
+    // Two different questions. The books never move -- that is invariant 1, and
+    // a drift here is a bug. Circulation moves whenever money is issued, which
+    // in v1 happens only if a scenario asked for it.
+    const double books_at_end = world.books_balance();
+    const double circulation_at_end = world.money_in_circulation();
+    std::println("books  start={:.6f} end={:.6f} drift={:.9f}  (must be flat)",
+                 books_at_start, books_at_end, books_at_end - books_at_start);
+    std::println("supply start={:.6f} end={:.6f} issued={:.6f}",
+                 circulation_at_start, circulation_at_end,
+                 circulation_at_end - circulation_at_start);
 
     return 0;
 }
