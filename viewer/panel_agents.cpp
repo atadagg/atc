@@ -1,26 +1,53 @@
-#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 #include "app.hpp"
 #include "imgui.h"
-#include "params.hpp"
+#include "model_agents.hpp"
 
 namespace {
 
-bool firm_passes(const App& app, uint32_t i, const Firm& f) {
-    const auto& pinned = app.filters.pinned_firms;
-    if (!pinned.empty() && std::find(pinned.begin(), pinned.end(), i) == pinned.end()) {
-        return false;
+// The whole skin, in one function: a Cell in, pixels out.
+void draw_cell(App& app, const Cell& c, AgentKind kind, uint32_t row_id, int col) {
+    char buf[32];
+    switch (c.kind) {
+        case CellKind::Missing:
+            ImGui::TextUnformatted("-");
+            break;
+        case CellKind::Flag:
+            ImGui::TextUnformatted(c.number != 0.0 ? "yes" : "");
+            break;
+        case CellKind::Count:
+            ImGui::Text("%d", static_cast<int>(c.number));
+            break;
+        case CellKind::AgentRef:
+            if (col == 0) {
+                // The id column selects the row rather than navigating away.
+                std::snprintf(buf, sizeof(buf), "%u", c.ref);
+                if (ImGui::Selectable(buf, kind == AgentKind::Firm
+                                               ? app.selected_firm == row_id
+                                               : app.selected_household == row_id,
+                                      ImGuiSelectableFlags_SpanAllColumns)) {
+                    if (kind == AgentKind::Firm) {
+                        app.selected_firm = row_id;
+                    } else {
+                        app.selected_household = row_id;
+                    }
+                }
+            } else {
+                ImGui::Text("%u", c.ref);
+            }
+            break;
+        case CellKind::Number:
+            std::snprintf(buf, sizeof(buf), "%.*f", c.precision, c.number);
+            ImGui::TextUnformatted(buf);
+            break;
     }
-    if (app.filters.wage_at_floor && f.wage > params::kMinWage) return false;
-    if (app.filters.vacancy_open && !f.has_open_vacancy) return false;
-    if (app.filters.inventory_zero && f.inventory > 0.0) return false;
-    return true;
 }
 
 void draw_firm_table(App& app) {
-    const auto& firms = app.sim.world().firms;
+    const World& w = app.sim.world();
 
     ImGui::Checkbox("wage at floor", &app.filters.wage_at_floor);
     ImGui::SameLine();
@@ -34,184 +61,193 @@ void draw_firm_table(App& app) {
         if (ImGui::SmallButton("clear")) app.filters.pinned_firms.clear();
     }
 
+    const auto cols = firm_columns();
     constexpr ImGuiTableFlags kFlags = ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
                                        ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY;
-    if (!ImGui::BeginTable("firms", 8, kFlags, ImVec2(0, 300))) return;
+    if (!ImGui::BeginTable("firms", static_cast<int>(cols.size()), kFlags, ImVec2(0, 300))) {
+        return;
+    }
 
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("firm");
-    ImGui::TableSetupColumn("wage");
-    ImGui::TableSetupColumn("price");
-    ImGui::TableSetupColumn("inventory");
-    ImGui::TableSetupColumn("staff");
-    ImGui::TableSetupColumn("liquidity");
-    ImGui::TableSetupColumn("vacancy");
-    ImGui::TableSetupColumn("demand");
+    for (const ColumnSpec& c : cols) {
+        ImGui::TableSetupColumn(c.header, c.sortable ? ImGuiTableColumnFlags_None
+                                                     : ImGuiTableColumnFlags_NoSort);
+    }
     ImGui::TableHeadersRow();
 
-    std::vector<uint32_t> rows;
-    rows.reserve(firms.size());
-    for (uint32_t i = 0; i < firms.size(); ++i) {
-        if (firm_passes(app, i, firms[i])) rows.push_back(i);
+    // Translate ImGui's sort state into the model's, and let the model sort.
+    SortSpec sort;
+    if (ImGuiTableSortSpecs* s = ImGui::TableGetSortSpecs();
+        s != nullptr && s->SpecsCount > 0) {
+        sort.column = s->Specs[0].ColumnIndex;
+        sort.ascending = s->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
     }
 
-    if (ImGuiTableSortSpecs* sort = ImGui::TableGetSortSpecs();
-        sort != nullptr && sort->SpecsCount > 0) {
-        const ImGuiTableColumnSortSpecs& s = sort->Specs[0];
-        const bool asc = s.SortDirection == ImGuiSortDirection_Ascending;
-        std::stable_sort(rows.begin(), rows.end(), [&](uint32_t a, uint32_t b) {
-            const Firm& fa = firms[a];
-            const Firm& fb = firms[b];
-            double va = 0.0;
-            double vb = 0.0;
-            switch (s.ColumnIndex) {
-                case 0: va = a; vb = b; break;
-                case 1: va = fa.wage; vb = fb.wage; break;
-                case 2: va = fa.price; vb = fb.price; break;
-                case 3: va = fa.inventory; vb = fb.inventory; break;
-                case 4: va = static_cast<double>(fa.employees.size());
-                        vb = static_cast<double>(fb.employees.size()); break;
-                case 5: va = fa.liquidity; vb = fb.liquidity; break;
-                case 6: va = fa.has_open_vacancy; vb = fb.has_open_vacancy; break;
-                default: va = fa.demand_last_month; vb = fb.demand_last_month; break;
-            }
-            return asc ? (va < vb) : (vb < va);
-        });
-    }
-
-    for (uint32_t i : rows) {
-        const Firm& f = firms[i];
+    for (uint32_t i : firm_rows(w, app.filters, sort)) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        char label[16];
-        std::snprintf(label, sizeof(label), "%u", i);
-        if (ImGui::Selectable(label, app.selected_firm == i,
-                              ImGuiSelectableFlags_SpanAllColumns)) {
-            app.selected_firm = i;
+        for (int c = 0; c < static_cast<int>(cols.size()); ++c) {
+            ImGui::TableNextColumn();
+            draw_cell(app, firm_cell(w, i, c), AgentKind::Firm, i, c);
         }
-        ImGui::TableNextColumn(); ImGui::Text("%.2f", f.wage);
-        ImGui::TableNextColumn(); ImGui::Text("%.3f", f.price);
-        ImGui::TableNextColumn(); ImGui::Text("%.1f", f.inventory);
-        ImGui::TableNextColumn(); ImGui::Text("%zu", f.employees.size());
-        ImGui::TableNextColumn(); ImGui::Text("%.1f", f.liquidity);
-        ImGui::TableNextColumn(); ImGui::TextUnformatted(f.has_open_vacancy ? "yes" : "");
-        ImGui::TableNextColumn(); ImGui::Text("%.1f", f.demand_last_month);
     }
     ImGui::EndTable();
 }
 
 void draw_household_table(App& app) {
-    const auto& households = app.sim.world().households;
+    const World& w = app.sim.world();
 
     ImGui::Checkbox("unemployed only", &app.filters.unemployed);
 
+    const auto cols = household_columns();
     constexpr ImGuiTableFlags kFlags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY;
-    if (!ImGui::BeginTable("households", 5, kFlags, ImVec2(0, 300))) return;
+    if (!ImGui::BeginTable("households", static_cast<int>(cols.size()), kFlags,
+                           ImVec2(0, 300))) {
+        return;
+    }
 
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("household");
-    ImGui::TableSetupColumn("employer");
-    ImGui::TableSetupColumn("liquidity");
-    ImGui::TableSetupColumn("reservation wage");
-    ImGui::TableSetupColumn("planned consumption");
+    for (const ColumnSpec& c : cols) ImGui::TableSetupColumn(c.header);
     ImGui::TableHeadersRow();
 
     // Filter first, then clip over the filtered index vector -- ImGuiListClipper
     // sizes the scroll area from item_count x row_height, so skipping rows
-    // inside the loop (rather than shrinking item_count up front) desyncs the
-    // scrollbar from what actually renders.
-    std::vector<uint32_t> rows;
-    rows.reserve(households.size());
-    for (uint32_t i = 0; i < households.size(); ++i) {
-        if (app.filters.unemployed && households[i].employed()) continue;
-        rows.push_back(i);
-    }
+    // inside the loop desyncs the scrollbar from what actually renders.
+    const std::vector<uint32_t> rows = household_rows(w, app.filters, SortSpec{});
 
-    // Let ImGui skip the off-screen ones rather than formatting text for all
-    // of them every frame.
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
         for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
             const uint32_t i = rows[static_cast<size_t>(row)];
-            const Household& h = households[i];
             ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            char label[16];
-            std::snprintf(label, sizeof(label), "%u", i);
-            if (ImGui::Selectable(label, app.selected_household == i,
-                                  ImGuiSelectableFlags_SpanAllColumns)) {
-                app.selected_household = i;
+            for (int c = 0; c < static_cast<int>(cols.size()); ++c) {
+                ImGui::TableNextColumn();
+                draw_cell(app, household_cell(w, i, c), AgentKind::Household, i, c);
             }
-            ImGui::TableNextColumn();
-            if (h.employed()) {
-                ImGui::Text("%u", h.employer);
-            } else {
-                ImGui::TextUnformatted("-");
-            }
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", h.liquidity);
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", h.reservation_wage);
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", h.planned_consumption);
         }
     }
     ImGui::EndTable();
 }
 
-void draw_detail(App& app) {
-    const World& w = app.sim.world();
+// Find a field by label. Returns a Missing cell if the model did not emit
+// one -- used for fields the model only adds conditionally (a firm's
+// pending fire).
+const Cell& find_field(const DetailModel& d, const char* label) {
+    for (const DetailField& f : d.fields) {
+        if (std::strcmp(f.label, label) == 0) return f.value;
+    }
+    static const Cell missing = missing_cell();
+    return missing;
+}
 
-    if (app.selected_firm != NO_FIRM && app.selected_firm < w.firms.size()) {
-        const Firm& f = w.firms[app.selected_firm];
-        ImGui::SeparatorText("selected firm");
-        ImGui::Text("firm %u", app.selected_firm);
-        ImGui::Text("wage %.4f   price %.4f   inventory %.3f", f.wage, f.price, f.inventory);
-        ImGui::Text("liquidity %.3f", f.liquidity);
-        ImGui::Text("demand this month %.2f, last month %.2f",
-                    f.demand_this_month, f.demand_last_month);
-        ImGui::Text("months fully staffed %u", f.months_fully_staffed);
-        ImGui::Text("vacancy open %s, went unfilled %s",
-                    f.has_open_vacancy ? "yes" : "no",
-                    f.vacancy_went_unfilled ? "yes" : "no");
-        if (f.pending_fire != NO_HOUSEHOLD) {
-            ImGui::Text("pending fire: household %u", f.pending_fire);
-        }
-        ImGui::Text("employees (%zu):", f.employees.size());
-        for (uint32_t e : f.employees) {
-            ImGui::SameLine();
-            char b[16];
-            std::snprintf(b, sizeof(b), "%u", e);
-            if (ImGui::SmallButton(b)) app.selected_household = e;
-        }
+// Find a link group by label. Returns nullptr if the model did not emit one
+// -- a household's "employer" group only exists while employed.
+const LinkGroup* find_group(const DetailModel& d, const char* label) {
+    for (const LinkGroup& g : d.groups) {
+        if (std::strcmp(g.label, label) == 0) return &g;
+    }
+    return nullptr;
+}
+
+// Layout and label wording are display concerns, so the detail panel lays
+// each agent kind out explicitly rather than looping generically over
+// fields -- that generic loop is what regressed the on-screen output (see
+// task-6 review). Values still come from the model's Cells (numbers,
+// precisions, refs); only the grouping into lines is decided here.
+void draw_firm_detail(App& app, const DetailModel& d) {
+    if (!d.present) return;
+
+    ImGui::SeparatorText("selected firm");
+    ImGui::Text("firm %u", d.id);
+
+    const Cell& wage = find_field(d, "wage");
+    const Cell& price = find_field(d, "price");
+    const Cell& inventory = find_field(d, "inventory");
+    ImGui::Text("wage %.*f   price %.*f   inventory %.*f", wage.precision, wage.number,
+                price.precision, price.number, inventory.precision, inventory.number);
+
+    const Cell& liquidity = find_field(d, "liquidity");
+    ImGui::Text("liquidity %.*f", liquidity.precision, liquidity.number);
+
+    const Cell& demand_this = find_field(d, "demand this month");
+    const Cell& demand_last = find_field(d, "demand last month");
+    ImGui::Text("demand this month %.*f, last month %.*f", demand_this.precision,
+                demand_this.number, demand_last.precision, demand_last.number);
+
+    const Cell& staffed = find_field(d, "months fully staffed");
+    ImGui::Text("months fully staffed %u", static_cast<uint32_t>(staffed.number));
+
+    const Cell& vacancy_open = find_field(d, "vacancy open");
+    const Cell& vacancy_unfilled = find_field(d, "vacancy went unfilled");
+    ImGui::Text("vacancy open %s, went unfilled %s",
+                vacancy_open.number != 0.0 ? "yes" : "no",
+                vacancy_unfilled.number != 0.0 ? "yes" : "no");
+
+    const Cell& pending_fire = find_field(d, "pending fire");
+    if (pending_fire.kind != CellKind::Missing) {
+        ImGui::Text("pending fire: household %u", pending_fire.ref);
     }
 
-    if (app.selected_household != NO_HOUSEHOLD && app.selected_household < w.households.size()) {
-        const Household& h = w.households[app.selected_household];
-        ImGui::SeparatorText("selected household");
-        ImGui::Text("household %u", app.selected_household);
-        ImGui::Text("liquidity %.4f   reservation wage %.4f", h.liquidity, h.reservation_wage);
-        ImGui::Text("planned consumption %.4f", h.planned_consumption);
-        if (h.employed()) {
-            ImGui::Text("employer:");
+    if (const LinkGroup* employees = find_group(d, "employees"); employees != nullptr) {
+        ImGui::Text("employees (%zu):", employees->links.size());
+        char buf[16];
+        for (const DetailLink& link : employees->links) {
             ImGui::SameLine();
-            char b[16];
-            std::snprintf(b, sizeof(b), "%u", h.employer);
-            if (ImGui::SmallButton(b)) app.selected_firm = h.employer;
-        } else {
-            ImGui::TextUnformatted("unemployed");
+            std::snprintf(buf, sizeof(buf), "%u", link.target);
+            if (ImGui::SmallButton(buf)) app.selected_household = link.target;
         }
-        ImGui::TextUnformatted("shops:");
-        for (size_t s = 0; s < h.shops.size(); ++s) {
+    }
+}
+
+void draw_household_detail(App& app, const DetailModel& d) {
+    if (!d.present) return;
+
+    ImGui::SeparatorText("selected household");
+    ImGui::Text("household %u", d.id);
+
+    const Cell& liquidity = find_field(d, "liquidity");
+    const Cell& reservation_wage = find_field(d, "reservation wage");
+    ImGui::Text("liquidity %.*f   reservation wage %.*f", liquidity.precision, liquidity.number,
+                reservation_wage.precision, reservation_wage.number);
+
+    const Cell& planned_consumption = find_field(d, "planned consumption");
+    ImGui::Text("planned consumption %.*f", planned_consumption.precision,
+                planned_consumption.number);
+
+    const LinkGroup* employer = find_group(d, "employer");
+    if (employer != nullptr && !employer->links.empty()) {
+        ImGui::Text("employer:");
+        ImGui::SameLine();
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%u", employer->links[0].target);
+        if (ImGui::SmallButton(buf)) app.selected_firm = employer->links[0].target;
+    } else {
+        ImGui::TextUnformatted("unemployed");
+    }
+
+    ImGui::TextUnformatted("shops:");
+    if (const LinkGroup* shops = find_group(d, "shops"); shops != nullptr) {
+        // Sized for GCC's worst-case %zu width, not the real (small) shop
+        // count -- the printed text is unaffected.
+        char buf[40];
+        for (size_t s = 0; s < shops->links.size(); ++s) {
+            const DetailLink& link = shops->links[s];
             ImGui::SameLine();
-            char b[24];
-            std::snprintf(b, sizeof(b), "%u##shop%zu", h.shops[s], s);
-            if (ImGui::SmallButton(b)) app.selected_firm = h.shops[s];
-            if (h.unsatisfied[s] > 0.0) {
+            std::snprintf(buf, sizeof(buf), "%u##shop%zu", link.target, s);
+            if (ImGui::SmallButton(buf)) app.selected_firm = link.target;
+            if (link.has_annotation) {
                 ImGui::SameLine();
-                ImGui::TextDisabled("(-%.1f)", h.unsatisfied[s]);
+                ImGui::TextDisabled("(-%.1f)", link.annotation);
             }
         }
     }
+}
+
+void draw_detail(App& app) {
+    const World& w = app.sim.world();
+    draw_firm_detail(app, firm_detail(w, app.selected_firm));
+    draw_household_detail(app, household_detail(w, app.selected_household));
 }
 
 }  // namespace

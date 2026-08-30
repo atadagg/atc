@@ -53,7 +53,13 @@ void search_reliable_shop(World& w, uint32_t household, Rng& rng) {
         if (draw <= 0.0) { slot = s; break; }
     }
 
-    uint32_t replacement = network::random_unconnected_firm_by_size(w, household, rng);
+    // Unweighted, per spec 4 (P_quant): "replace it with a random firm". This
+    // path applies no price test, so a size-weighted draw here would be
+    // unopposed -- it routed rationed households from one large firm to the
+    // next and left small firms permanently unreachable, which is what pinned
+    // two thirds of the firms at kMinWage with no staff. The size weighting
+    // belongs only on the price-comparison path, where price decides.
+    uint32_t replacement = network::random_unconnected_firm(w, household, rng);
     if (replacement == NO_FIRM) return;
     network::replace_shop(w, household, slot, replacement);
 }

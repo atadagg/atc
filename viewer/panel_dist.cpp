@@ -4,6 +4,7 @@
 #include "app.hpp"
 #include "histogram.hpp"
 #include "imgui.h"
+#include "model_dist.hpp"
 
 namespace {
 
@@ -47,21 +48,6 @@ void draw_one(App& app, const char* name, const std::vector<double>& values,
     }
 }
 
-std::vector<double> firm_field(const World& w, int which) {
-    std::vector<double> v;
-    v.reserve(w.firms.size());
-    for (const Firm& f : w.firms) {
-        switch (which) {
-            case 0: v.push_back(f.wage); break;
-            case 1: v.push_back(f.price); break;
-            case 2: v.push_back(f.inventory); break;
-            case 3: v.push_back(static_cast<double>(f.employees.size())); break;
-            default: v.push_back(f.liquidity); break;
-        }
-    }
-    return v;
-}
-
 }  // namespace
 
 void draw_dist_panel(App& app) {
@@ -76,22 +62,11 @@ void draw_dist_panel(App& app) {
     const int effective_bins = bins < 1 ? 1 : bins;
 
     const World& w = app.sim.world();
-    draw_one(app, "firm wage", firm_field(w, 0), effective_bins, true);
-    draw_one(app, "firm price", firm_field(w, 1), effective_bins, true);
-    draw_one(app, "firm inventory", firm_field(w, 2), effective_bins, true);
-    draw_one(app, "firm headcount", firm_field(w, 3), effective_bins, true);
-    draw_one(app, "firm liquidity", firm_field(w, 4), effective_bins, true);
-
-    std::vector<double> hl;
-    std::vector<double> rw;
-    hl.reserve(w.households.size());
-    rw.reserve(w.households.size());
-    for (const Household& h : w.households) {
-        hl.push_back(h.liquidity);
-        rw.push_back(h.reservation_wage);
+    const auto specs = distributions();
+    for (int i = 0; i < static_cast<int>(specs.size()); ++i) {
+        const DistSpec& s = specs[static_cast<size_t>(i)];
+        draw_one(app, s.name, dist_values(w, i), effective_bins, s.pinnable);
     }
-    draw_one(app, "household liquidity", hl, effective_bins, false);
-    draw_one(app, "household reservation wage", rw, effective_bins, false);
 
     ImGui::End();
 }

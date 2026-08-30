@@ -26,4 +26,10 @@ bool has_shop(const Household& h, uint32_t firm);
 // Returns NO_FIRM if every firm is already connected.
 uint32_t random_unconnected_firm_by_size(const World& w, uint32_t household, Rng& rng);
 
+// Draw a firm the household does not already shop at, with equal probability
+// regardless of size. Used by the rationed-household rewiring path, which
+// applies no price test -- see the comment on search_reliable_shop.
+// Returns NO_FIRM if every firm is already connected.
+uint32_t random_unconnected_firm(const World& w, uint32_t household, Rng& rng);
+
 }  // namespace network
