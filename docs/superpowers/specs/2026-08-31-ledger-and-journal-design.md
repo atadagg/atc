@@ -205,9 +205,34 @@ recipient in a distribution take the exact remaining balance rather than a
 separately computed share. That is both what removes the overdraft and what
 removes the residue — one change, two problems.
 
-**Do not assume the sign of the rounding.** Measure it on the reference run
-before enabling enforcement. This project has twice been wrong by reasoning
-about a number instead of dumping it.
+**Measured, 2026-08-31 — the risk is real.** Temporary instrumentation on
+`transfer` over the reference run (seed 1, burn-in 1000, 6000 months):
+
+| Quantity | Measured |
+|---|---|
+| Writes that left a balance below zero | **16,953** (~2.4 per month) |
+| Worst balance seen | **−1.435e-12** |
+| On households | **0** — `daily::shop`'s clamp holds |
+| On firms, via wage payments | 5,838 |
+| On firms, via profit distribution | 11,115 |
+
+So solvency enforcement, added naively, would reject ~17,000 movements per
+reference run — every one of them a rounding crumb rather than real money.
+**The fix is a prerequisite, not a follow-up.**
+
+Note *why* profit is the larger half. A firm with no employees has a zero wage
+bill, so its retained buffer (`buffer_factor * wage_bill`) is also zero, so it
+distributes its entire balance — and a full payout is exactly the case where N
+computed shares can sum to marginally more than the pot. Roughly 16% of firms
+are empty in any given month.
+
+Both sites take the same fix: **the last recipient in a distribution takes the
+exact remaining balance rather than a separately computed share.** This also
+removes the machine-epsilon residue described in Part 1 — one change, three
+problems.
+
+The instrumentation was reverted and is not in the tree; re-derive it from this
+table rather than trusting it, if it matters again.
 
 ### Testing
 
