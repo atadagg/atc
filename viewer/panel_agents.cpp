@@ -130,61 +130,112 @@ void draw_household_table(App& app) {
     ImGui::EndTable();
 }
 
-void draw_one_detail(App& app, const DetailModel& d) {
+// Find a field by label. Returns a Missing cell if the model did not emit
+// one -- used for fields the model only adds conditionally (a firm's
+// pending fire).
+const Cell& find_field(const DetailModel& d, const char* label) {
+    for (const DetailField& f : d.fields) {
+        if (std::strcmp(f.label, label) == 0) return f.value;
+    }
+    static const Cell missing = missing_cell();
+    return missing;
+}
+
+// Find a link group by label. Returns nullptr if the model did not emit one
+// -- a household's "employer" group only exists while employed.
+const LinkGroup* find_group(const DetailModel& d, const char* label) {
+    for (const LinkGroup& g : d.groups) {
+        if (std::strcmp(g.label, label) == 0) return &g;
+    }
+    return nullptr;
+}
+
+// Layout and label wording are display concerns, so the detail panel lays
+// each agent kind out explicitly rather than looping generically over
+// fields -- that generic loop is what regressed the on-screen output (see
+// task-6 review). Values still come from the model's Cells (numbers,
+// precisions, refs); only the grouping into lines is decided here.
+void draw_firm_detail(App& app, const DetailModel& d) {
     if (!d.present) return;
 
-    ImGui::SeparatorText(d.kind == AgentKind::Firm ? "selected firm" : "selected household");
-    ImGui::Text("%s %u", d.kind == AgentKind::Firm ? "firm" : "household", d.id);
+    ImGui::SeparatorText("selected firm");
+    ImGui::Text("firm %u", d.id);
 
-    char buf[64];
-    for (const DetailField& f : d.fields) {
-        // Skip a field that is also rendered as a link group (a household's
-        // employer, present both ways in the model) -- otherwise the id
-        // would appear twice, once as inert text and once as a button.
-        bool has_group = false;
-        for (const LinkGroup& g : d.groups) {
-            if (std::strcmp(g.label, f.label) == 0) {
-                has_group = true;
-                break;
-            }
-        }
-        if (has_group) continue;
+    const Cell& wage = find_field(d, "wage");
+    const Cell& price = find_field(d, "price");
+    const Cell& inventory = find_field(d, "inventory");
+    ImGui::Text("wage %.*f   price %.*f   inventory %.*f", wage.precision, wage.number,
+                price.precision, price.number, inventory.precision, inventory.number);
 
-        switch (f.value.kind) {
-            case CellKind::Missing:
-                ImGui::Text("%s: -", f.label);
-                break;
-            case CellKind::Flag:
-                ImGui::Text("%s: %s", f.label, f.value.number != 0.0 ? "yes" : "no");
-                break;
-            case CellKind::Count:
-                ImGui::Text("%s: %d", f.label, static_cast<int>(f.value.number));
-                break;
-            case CellKind::AgentRef:
-                ImGui::Text("%s: %u", f.label, f.value.ref);
-                break;
-            case CellKind::Number:
-                std::snprintf(buf, sizeof(buf), "%.*f", f.value.precision, f.value.number);
-                ImGui::Text("%s: %s", f.label, buf);
-                break;
-        }
+    const Cell& liquidity = find_field(d, "liquidity");
+    ImGui::Text("liquidity %.*f", liquidity.precision, liquidity.number);
+
+    const Cell& demand_this = find_field(d, "demand this month");
+    const Cell& demand_last = find_field(d, "demand last month");
+    ImGui::Text("demand this month %.*f, last month %.*f", demand_this.precision,
+                demand_this.number, demand_last.precision, demand_last.number);
+
+    const Cell& staffed = find_field(d, "months fully staffed");
+    ImGui::Text("months fully staffed %u", static_cast<uint32_t>(staffed.number));
+
+    const Cell& vacancy_open = find_field(d, "vacancy open");
+    const Cell& vacancy_unfilled = find_field(d, "vacancy went unfilled");
+    ImGui::Text("vacancy open %s, went unfilled %s",
+                vacancy_open.number != 0.0 ? "yes" : "no",
+                vacancy_unfilled.number != 0.0 ? "yes" : "no");
+
+    const Cell& pending_fire = find_field(d, "pending fire");
+    if (pending_fire.kind != CellKind::Missing) {
+        ImGui::Text("pending fire: household %u", pending_fire.ref);
     }
 
-    for (size_t g = 0; g < d.groups.size(); ++g) {
-        const LinkGroup& group = d.groups[g];
-        ImGui::Text("%s (%zu):", group.label, group.links.size());
-        for (size_t i = 0; i < group.links.size(); ++i) {
-            const DetailLink& link = group.links[i];
+    if (const LinkGroup* employees = find_group(d, "employees"); employees != nullptr) {
+        ImGui::Text("employees (%zu):", employees->links.size());
+        char buf[16];
+        for (const DetailLink& link : employees->links) {
             ImGui::SameLine();
-            // The ## suffix keeps ids unique when the same agent appears twice.
-            std::snprintf(buf, sizeof(buf), "%u##g%zul%zu", link.target, g, i);
-            if (ImGui::SmallButton(buf)) {
-                if (link.kind == AgentKind::Firm) {
-                    app.selected_firm = link.target;
-                } else {
-                    app.selected_household = link.target;
-                }
-            }
+            std::snprintf(buf, sizeof(buf), "%u", link.target);
+            if (ImGui::SmallButton(buf)) app.selected_household = link.target;
+        }
+    }
+}
+
+void draw_household_detail(App& app, const DetailModel& d) {
+    if (!d.present) return;
+
+    ImGui::SeparatorText("selected household");
+    ImGui::Text("household %u", d.id);
+
+    const Cell& liquidity = find_field(d, "liquidity");
+    const Cell& reservation_wage = find_field(d, "reservation wage");
+    ImGui::Text("liquidity %.*f   reservation wage %.*f", liquidity.precision, liquidity.number,
+                reservation_wage.precision, reservation_wage.number);
+
+    const Cell& planned_consumption = find_field(d, "planned consumption");
+    ImGui::Text("planned consumption %.*f", planned_consumption.precision,
+                planned_consumption.number);
+
+    const LinkGroup* employer = find_group(d, "employer");
+    if (employer != nullptr && !employer->links.empty()) {
+        ImGui::Text("employer:");
+        ImGui::SameLine();
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%u", employer->links[0].target);
+        if (ImGui::SmallButton(buf)) app.selected_firm = employer->links[0].target;
+    } else {
+        ImGui::TextUnformatted("unemployed");
+    }
+
+    ImGui::TextUnformatted("shops:");
+    if (const LinkGroup* shops = find_group(d, "shops"); shops != nullptr) {
+        // Sized for GCC's worst-case %zu width, not the real (small) shop
+        // count -- the printed text is unaffected.
+        char buf[40];
+        for (size_t s = 0; s < shops->links.size(); ++s) {
+            const DetailLink& link = shops->links[s];
+            ImGui::SameLine();
+            std::snprintf(buf, sizeof(buf), "%u##shop%zu", link.target, s);
+            if (ImGui::SmallButton(buf)) app.selected_firm = link.target;
             if (link.has_annotation) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("(-%.1f)", link.annotation);
@@ -195,8 +246,8 @@ void draw_one_detail(App& app, const DetailModel& d) {
 
 void draw_detail(App& app) {
     const World& w = app.sim.world();
-    draw_one_detail(app, firm_detail(w, app.selected_firm));
-    draw_one_detail(app, household_detail(w, app.selected_household));
+    draw_firm_detail(app, firm_detail(w, app.selected_firm));
+    draw_household_detail(app, household_detail(w, app.selected_household));
 }
 
 }  // namespace
