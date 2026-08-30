@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 144 cases
+./build/economy_tests                              # 152 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 ```
@@ -110,7 +110,9 @@ Steering (live parameter mutation from the UI) is deliberately not
 implemented: `params.hpp`
 is `constexpr`, and mutating simulation parameters mid-run needs its own
 answer for determinism (an intervention log, most likely) before it can be
-built without quietly breaking invariant 2.
+built without quietly breaking invariant 2. That log is now specified and
+promoted ahead of the §8 extensions — see Next work, and
+`docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`.
 
 ## Architecture
 
@@ -119,6 +121,7 @@ built without quietly breaking invariant 2.
 | `params.hpp` | All constants. Split into published calibration vs. invented initial conditions — respect that boundary. |
 | `agents.hpp` | `Firm` and `Household` plain structs, `NO_FIRM`/`NO_HOUSEHOLD` sentinel |
 | `world.{hpp,cpp}` | Owns the agent arrays; `total_money()` |
+| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write `liquidity` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
 | `network.{hpp,cpp}` | Household↔firm links (employment, shop connections) |
 | `firm_decisions.{hpp,cpp}` | Monthly: wage, hire/fire, price |
@@ -155,10 +158,13 @@ Ordering is load-bearing and subtle:
 ## Invariants — do not break these
 
 1. **Money conservation.** `sum(household.liquidity) + sum(firm.liquidity)`
-   is constant. Drift is 0 over the 7000-month reference run (spread 2e-9). If this breaks, it
-   is the highest-priority bug; do not loosen a tolerance to hide it.
-   Likeliest culprits, in order: `daily::shop`, `month_close::pay_wages`,
-   `month_close::distribute_profits`.
+   is constant. Drift is 0 over the 7000-month reference run (spread 3e-9,
+   which is `total_money()`'s own summation error, not movement). This is now
+   true **by construction**: `ledger::transfer` is the only code that writes
+   `liquidity`, and it does one subtraction and one addition of the same
+   `double`. Do not reintroduce a paired mutation anywhere — a new module that
+   moves money calls `transfer` or it is wrong. If conservation ever breaks,
+   it is the highest-priority bug; do not loosen a tolerance to hide it.
 2. **Determinism.** Same seed → byte-identical run, including randomized
    agent order. All randomness flows through an explicitly passed `Rng&`.
    No `rand()`, no globals, no `std::random_device` outside seeding.
@@ -169,6 +175,15 @@ Ordering is load-bearing and subtle:
 3. **Indices, never pointers,** between agents. Sentinel `0xFFFFFFFFu`.
 4. **No virtuals on agent types.** `Recorder` is the sole exception.
    Variation arrives as fields and enums, never subclasses.
+
+   3 and 4 are **correctness properties, not optimizations** — do not trade
+   them for convenience thinking the cost is only speed. They are what keeps
+   agents trivially copyable, which is what makes `SimSnapshot` a plain
+   assignment and therefore what makes the viewer's backward scrub
+   byte-exact (see the comment on `SimSnapshot` in `viewer/sim.hpp`). Cache
+   locality is a bonus that starts mattering at the 100k target; at 1k
+   agents it is irrelevant. A pointer or a virtual on `Firm` costs replay,
+   scrubbing and save-games, not milliseconds.
 5. **Core does I/O only through `Recorder`.** No `std::cout` in `src/`
    outside `main.cpp`.
 6. Build warning-clean under `-Wall -Wextra -Wpedantic`.
@@ -203,7 +218,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 144 tests, 227,856 assertions.
+v1 complete and merged. 152 tests, 227,869 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -225,6 +240,44 @@ Criterion 1 is therefore **open**, and back to roughly where it was before
 the zero-wage fix. The conjecture below — that v1 cannot represent
 deficient demand, and needs the credit/leakage extension — is now the
 leading explanation rather than one of two.
+
+### Done: the `transfer` chokepoint (step 1 of the ledger spec)
+
+`ledger::transfer(World&, Account from, Account to, double amount)` is now the
+only code that writes `liquidity`. `Account` is a tagged index
+(`{Kind::Firm|Household, uint32_t}`, invariant 3). The three paired-mutation
+sites are migrated: `daily::shop`, `month_close::pay_wages`,
+`month_close::distribute_profits`. Overdraft is deliberately *not* policed in
+`transfer` — that is a caller policy, and credit will introduce accounts that
+legitimately go negative.
+
+This is the chokepoint, **not yet the journal**. Balances still have no
+recorded history; entries behind `Recorder` are step 2 and still open.
+
+**The reference baseline moved, and this is why.** The spec's acceptance test
+was byte-identical output. It is not byte-identical, for a reason that is
+arithmetic and not behavioural: paying 10 workers used to be one debit of the
+aggregate `bill` followed by ten credits; true double-entry is ten paired
+debit/credits. Those differ in the last bits of a `double`, and the system is
+chaotic, so 6000 months amplifies ~3e-9 at month 0 into a visibly different
+CSV. Evidence it is a rounding path and not an economics change (seed 1,
+6000 post-burn-in months):
+
+| | before | after |
+|---|---|---|
+| unemployment mean / sd | 0.0033 / 0.0039 | 0.0033 / 0.0040 |
+| Phillips | −0.404 | −0.444 |
+| Beveridge | −0.622 | −0.624 |
+| Gini mean (early → late) | 0.0141 (0.0168 → 0.0122) | 0.0142 (0.0168 → 0.0144) |
+| money spread | 2e-9 | 3e-9 |
+
+Determinism (invariant 2) re-verified: same seed, byte-identical repeat runs.
+
+Consequence to remember: `pay_wages` can leave a firm holding a
+machine-epsilon residue rather than exactly zero, because `headcount` debits
+of `per_worker` do not sum to exactly `bill`. That is a rounding remainder,
+not unpaid wages. Do not "fix" it by restoring an aggregate debit — that
+reintroduces the convention the chokepoint removes.
 
 ### Resolved: the size-weighted draw on the rationed path
 
@@ -378,7 +431,26 @@ Conjecture: mean and range are the same question (unemployment is floored at
 0), and the likely route to both is a demand leakage — the credit/bank
 extension. Untested.
 
-## Next work, in dependency order
+## Next work
+
+### 0. Substrate, before the extensions
+
+**`transfer` chokepoint and the intervention log.** Not economics — the two
+pieces that make everything after them cheaper, and both get harder once more
+modules move money. See
+`docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`.
+
+- ~~**`transfer(from, to, amount)`**~~ — **done**, see Status. Journaling it
+  behind `Recorder` (step 2 of the spec's order of work) is still open.
+- **The intervention log.** A run becomes *(seed, log)* rather than seed
+  alone, which is what lets parameters change mid-run without breaking
+  invariant 2. This is the blocker named in the Viewer section above, and
+  the same mechanism gives save games, replays, scenario tests as data, and
+  a readable trail of how an economy reached its state. Requires splitting
+  `params.hpp` into structural (`constexpr`) and behavioural (runtime
+  `Params`), and putting `Params` into `SimSnapshot`.
+
+### Extensions, in dependency order
 
 From spec §8. Criterion 1 is **open** again since the rewiring fix (see
 Status), and the leading explanation is that v1 cannot represent deficient
@@ -420,6 +492,10 @@ not by priority.
 - `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` and
   `docs/superpowers/plans/2026-08-30-viewer-view-model.md` — the viewer's
   view-model layer: what it separates and why a second skin reuses it.
+- `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md` — the
+  `transfer` chokepoint and the intervention log: why they come before the
+  §8 extensions, and the three details in the log design that are easy to
+  get wrong.
 - `DESIGN.md` — the originating concept: a magic-capitalism tycoon/grand-
   strategy game. This simulation is the economic substrate that design
   silently assumed. Retained deliberately.
