@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 111 cases
+./build/economy_tests                              # 144 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 ```
@@ -87,7 +87,23 @@ never interpolation — the same determinism (invariant 2) that makes a run
 reproducible from a seed is what makes a scrubbed-to month byte-identical to
 having run straight there. Testable viewer logic — `Sim`'s snapshot/seek,
 `RingRecorder`, histogram binning — lives in `viewer_core`, separate from the
-ImGui panels, and is covered by `tests/test_viewer_*.cpp`. Steering (live
+ImGui panels, and is covered by `tests/test_viewer_*.cpp`.
+
+What the viewer *shows* is decided in a view-model layer (`viewer/cell.hpp`,
+`model_agents`, `model_dist`, `model_time`), separate from how it is drawn.
+Panels render `Cell`s and never reach into `Firm`/`Household` themselves:
+filters, sorting, the column schema, the detail panel's link graph and the
+scrub bounds are all display-independent and tested without a window. A
+`Cell` carries a raw number for every kind — that number is the sort key —
+and never a pre-formatted string, so a future skin (ASCII, 2D, 3D) reuses
+the decisions and reimplements only the drawing. `Missing` is a cell kind,
+not a sentinel: an unemployed household's employer must never reach a skin
+as `0xFFFFFFFF`, which would print as 4294967295 and sort above every real
+employer. Line grouping and label wording stay in the panel — those are
+display concerns. See
+`docs/superpowers/specs/2026-08-30-viewer-view-model-design.md`.
+
+Steering (live
 parameter mutation from the UI) is deliberately not implemented: `params.hpp`
 is `constexpr`, and mutating simulation parameters mid-run needs its own
 answer for determinism (an intervention log, most likely) before it can be
@@ -178,7 +194,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 136 tests.
+v1 complete and merged. 144 tests, 227,856 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -341,8 +357,11 @@ extension. Untested.
 
 ## Next work, in dependency order
 
-From spec §8. Criterion 1 is resolved, so the labour market now moves and
-extensions can be evaluated against it.
+From spec §8. Criterion 1 is **open** again since the rewiring fix (see
+Status), and the leading explanation is that v1 cannot represent deficient
+demand at all. That makes item 7 — credit, the first real demand leakage —
+the one most likely to move it, though the ordering below is by dependency,
+not by priority.
 
 1. **Firm-to-firm trade** → `network`, `agents`. Makes the graph
    non-bipartite. This *is* the supply chain; it emerges from make-or-buy
@@ -360,7 +379,10 @@ extensions can be evaluated against it.
 7. **Credit and net worth** → new `bank` module. Bankruptcy cascades (CATS)
    produce realistic firm-size power laws.
 8. **Binary recorder, terminal renderer, custom graphics** → `recorder` plus
-   a separate frontend. Independent of everything above.
+   a separate frontend. Independent of everything above. The viewer's
+   view-model layer is the seam a second frontend plugs into: it should
+   reimplement drawing only, never re-derive filters, schemas or the link
+   graph.
 
 ## Documents
 
@@ -387,3 +409,12 @@ Real but judged not worth fixing yet. Reconsider when touching that code.
 - Per-day `vector + iota + shuffle` allocates ~147k times per reference run.
   Irrelevant at 1k agents; matters at the 100k target.
 - `month_close::run` takes no `Rng&`. Credit extensions will need one.
+- `draw_cell`'s `col == 0` special case (identity column is selectable) is a
+  schema fact living in the panel. Reordering a column schema would silently
+  move row selection. A `bool identity` on `ColumnSpec` is the fix, deferred
+  as speculative until a second skin exists.
+- `panel_agents.cpp` looks fields up by label string; a typo between
+  `model_agents.cpp` and the panel would print `0` rather than fail to
+  compile. `constexpr` shared label constants would make it a build error.
+- The scrub bar's call site (`scrub_bounds(app.max_month)`) is not itself
+  unit-tested — panels need a window. The rule it encodes is tested.
