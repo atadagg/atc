@@ -178,20 +178,68 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 111 tests, 196,738 assertions.
+v1 complete and merged. 136 tests.
 
-**All four success criteria pass** (seed 1, burn-in 1000, 6000 months;
-confirmed on seeds 2/3/4).
+**Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
+confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
+pass" — see "Resolved: the size-weighted draw on the rationed path" below.
+The earlier pass was produced by a network bug, not by the economics.
 
-| Criterion | Before fix | After fix |
+| Criterion | With the rewiring bug | Corrected |
 |---|---|---|
-| Endogenous unemployment fluctuation | FAIL — sd 0.0047, max 3.3% | **PASS** — mean 1.7%, sd 0.0285, max 12.6% |
-| Phillips curve | −0.111 | **−0.445** |
-| Beveridge curve | −0.339 | **−0.842** |
-| Wealth dispersion (Gini) | 0.0265 | **0.102**, rising, no collapse |
+| Endogenous unemployment fluctuation | "PASS" — sd 0.0285, max 12.6% | **FAIL** — mean 0.33%, sd 0.0039, max 2.8% |
+| Phillips curve | −0.445 | **−0.404** |
+| Beveridge curve | −0.842 | **−0.622** |
+| Wealth dispersion (Gini) | 0.102, rising | **0.0141**, early 0.0168 → late 0.0122 |
 
-Unemployment autocorrelation now persists to lag 36 (−0.36) instead of
-dying by lag 12.
+Criterion 4 still passes as coded (non-zero, does not collapse to half of
+early) but the dispersion is an order of magnitude smaller and trending
+down; do not read it as a strong result.
+
+Criterion 1 is therefore **open**, and back to roughly where it was before
+the zero-wage fix. The conjecture below — that v1 cannot represent
+deficient demand, and needs the credit/leakage extension — is now the
+leading explanation rather than one of two.
+
+### Resolved: the size-weighted draw on the rationed path
+
+**66 of 100 firms held no employees at all**, 54 of them pinned at exactly
+`kMinWage`, with prices ~0.08 against the survivors' ~1.02 — the cheapest
+firms in the economy could not attract a customer. 922 of 1000 households
+were employed, concentrated 13–29 per firm in the ~34 survivors, against
+Lengnick's ~10.
+
+This was the zero-wage zombie state relocated, not resolved: `kMinWage`
+removed the arithmetic absorbing point at 0 and the firms simply piled up
+on the floor instead.
+
+Root cause: `search_reliable_shop` drew its replacement with
+`random_unconnected_firm_by_size` (weight `1 + employees`). Spec §4 gives
+the size weighting to the **price-comparison** path only (`P_price`, where
+it stands for visibility and an actual price test decides the switch); the
+rationed path (`P_quant`) is specified as "replace it with a random firm".
+Size-weighted, that path is unopposed — no price is consulted at all — so a
+household turned away by a large firm was routed to another large firm ~30x
+as often, and a firm that had lost its staff could never regain the
+customers that would justify rehiring. Being small was self-perpetuating.
+
+The loop, traced on firm 0: no customers → demand ~30 units/month → hire one
+worker → that worker makes 63 units → inventory exceeds the upper band →
+fire → wage cut at the next unaffordable payroll → drift back to the floor.
+
+**Fix:** `network::random_unconnected_firm` (unweighted), used by
+`search_reliable_shop`. Firms at the floor 54 → **0**, firms employing
+66 → **90**, employed households 922 → **998**.
+
+**And it was propping up the criteria.** The cycling and the wealth
+dispersion that criteria 1 and 4 were measuring were substantially two
+thirds of the firms dying and half-reviving on a loop. Removing it makes
+the economy healthy and the criteria worse — see the table above. Correct
+beats passing.
+
+Lesson, alongside the averaging-artifact one below: **a criterion that
+starts passing after a fix is not thereby validated.** Check what mechanism
+is producing the number.
 
 ### Resolved: the zero-wage absorbing state
 
@@ -233,35 +281,41 @@ Measured post-burn-in over 6000 months:
 
 | Series | Mean | CV |
 |---|---|---|
-| `planned_consumption` (units households intend to buy) | 63,335 | **4.3%** |
-| `demand` (units firms are asked for) | 81,720 | **26.6%** |
-| monthly capacity | 61,908 | 2.9% |
-| `household_liquidity` | 94,790 | 0.4% |
+| `planned_consumption` (units households intend to buy) | 62,972 | **0.5%** |
+| `demand` (units firms are asked for) | 69,932 | **5.9%** |
+| monthly capacity | 62,794 | 0.4% |
+| `household_liquidity` | 95,081 | 0.2% |
 
-Household demand is **stable** and sits just above capacity. The volatile
+Household demand is **stable** and sits essentially at capacity. The volatile
 `demand` series is not want — it is the retry/telescoping mechanism counting
 one underlying want at several firms, so it rises when goods are scarce
-(corr with `inventory` = −0.77). Do not read `demand` as consumer appetite.
+(corr with `inventory` = −0.91). Do not read `demand` as consumer appetite.
 
-Inventory is now non-zero in 6000/6000 months (previously pinned at zero),
-which is what lets the price-cut and layoff branches fire at all.
+Inventory is non-zero in 6000/6000 months (once pinned at zero), which is
+what lets the price-cut and layoff branches fire at all.
 
 The cycle, by cross-correlation against unemployment over ±24 months
-(negative lag = leads): `planned_consumption` −0.79 at −12mo, `inventory`
-+0.90 at −5mo, `vacancies` −0.85 at +1mo, `mean_wage` **+0.62 at −17mo**.
+(negative lag = leads): `planned_consumption` −0.76 at −24mo, `inventory`
++0.77 at −3mo, `vacancies` −0.63 at +1mo, `mean_wage` −0.65 at +15mo.
 Consumption softens, inventory piles up, firms fire, unemployment peaks.
 
 Search the full ±24 window: an earlier table searched only ±9 and reported
-local extrema as peaks. `mean_wage`'s strongest relation is positive and
-*leading* (the boom bids wages up before the squeeze); the Phillips-type
-negative appears as −0.52 at +9mo. The cycle is ~55 months, so −17 and +38
-alias — trust the sign, treat the lag as approximate.
+local extrema as peaks. `planned_consumption`'s extremum sits at the window
+edge (−24), so its true lag is outside ±24 — trust the sign, treat the lag
+as approximate.
 
-### Why unemployment averages 1.7%, not Lengnick's 5%
+### Why unemployment averages 0.33%, not Lengnick's 5%
 
-Not a defect — an accounting identity. 33.2 fires/month × a ~0.5-month spell
-= 17 households = 1.7%. Spells are short because 45.6 of 100 firms hold an
-open vacancy, so β=5 search finds one 95.2% of the time.
+Not a defect — an accounting identity: a small number of fires per month
+times a spell under a month. Spells are short because a large share of firms
+hold an open vacancy at any time, so β=5 search almost always finds one.
+
+The per-month fire count, vacancy share and hit rate quoted here previously
+(33.2 / 45.6 / 95.2%, against a 1.7% mean) were measured with the
+size-weighted rewiring bug present and have **not** been re-measured since.
+The two rejected explanations below were also measured under it; their
+conclusions are probably unaffected — neither depended on firm
+concentration — but treat them as indicative, not confirmed.
 
 **Tested and rejected** (test, don't reason — see the averaging-artifact
 lesson above):
@@ -272,14 +326,14 @@ lesson above):
 **Actual cause: v1 has no demand leakage.** Closed circular flow, fixed money
 stock, no credit/investment/government ⇒ aggregate demand ≡ aggregate output
 in steady state. The price level floats until real demand equals capacity:
-planned consumption 63,335 vs full-employment output 63,000, i.e. the economy
-wants ~1005 workers and has 1000. So 70 firms/month want to hire vs 7 wanting
-to fire. Unemployment is **frictional by construction**; deficient demand is
-not representable in v1.
+planned consumption 62,972 vs full-employment output ~63,000, i.e. the
+economy wants about as many workers as it has. Unemployment is **frictional
+by construction**; deficient demand is not representable in v1.
 
-**Peak capped at 12.6% by the layoff throttle.** One fire per firm per month
-(faithful — spec §5.1), but a firing firm wants to shed **4.61 workers** on
-average, 47.7% of the time more than one. Plus the one-month lag.
+**Peak capped at 2.8% by the layoff throttle** (12.6% with the rewiring
+bug). One fire per firm per month (faithful — spec §5.1), plus the
+one-month lag. The per-fire shed figures quoted here before (4.61 workers,
+47.7% of the time more than one) predate the rewiring fix.
 
 Conjecture: mean and range are the same question (unemployment is floored at
 0), and the likely route to both is a demand leakage — the credit/bank
