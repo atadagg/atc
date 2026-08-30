@@ -94,6 +94,7 @@ const char* reason_name(ledger::Reason r) {
         case ledger::Reason::Purchase: return "purchase";
         case ledger::Reason::Wage:     return "wage";
         case ledger::Reason::Profit:   return "profit";
+        case ledger::Reason::Issuance: return "issuance";
         case ledger::Reason::Unspecified: break;
     }
     return "unspecified";

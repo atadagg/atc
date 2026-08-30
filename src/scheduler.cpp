@@ -1,6 +1,7 @@
 #include "scheduler.hpp"
 
 #include "daily.hpp"
+#include "intervention.hpp"
 #include "firm_decisions.hpp"
 #include "household_decisions.hpp"
 #include "month_close.hpp"
@@ -20,6 +21,17 @@ void Scheduler::settle_vacancy_bookkeeping() {
 }
 
 void Scheduler::run_month() {
+    // Month open: everything the operator did takes effect before any agent
+    // acts, in seq order. Applying them mid-month would make the result depend
+    // on where in the tick the change landed, which is exactly the
+    // nondeterminism the log exists to remove.
+    if (interventions_) {
+        if (journal_) journal_->set_time(months_elapsed_, ledger::kMonthClose);
+        for (const auto& i : interventions_->due(months_elapsed_)) {
+            intervention::apply(world_, i, journal_);
+        }
+    }
+
     firm_decisions::run_monthly(world_, rng_);
     household_decisions::run_monthly(world_, rng_);
     settle_vacancy_bookkeeping();

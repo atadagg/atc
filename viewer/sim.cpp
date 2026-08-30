@@ -5,13 +5,17 @@
 #include "params.hpp"
 #include "scheduler.hpp"
 
-Sim::Sim(uint64_t seed)
-    : seed_(seed), rng_(seed), world_(params::kNumHouseholds, params::kNumFirms, rng_) {
+Sim::Sim(uint64_t seed, const intervention::Log* log)
+    : seed_(seed), interventions_(log), rng_(seed),
+      world_(params::kNumHouseholds, params::kNumFirms, rng_) {
     snapshots_.push_back(SimSnapshot{world_, rng_, 0});
 }
 
 void Sim::step() {
-    Scheduler(world_, rng_).run_month();
+    Scheduler s(world_, rng_);
+    s.set_month(month_);
+    s.set_interventions(interventions_);
+    s.run_month();
     ++month_;
     maybe_retain_snapshot();
 }

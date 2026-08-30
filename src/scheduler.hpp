@@ -1,5 +1,6 @@
 #pragma once
 
+#include "intervention.hpp"
 #include "ledger.hpp"
 #include "rng.hpp"
 
@@ -19,6 +20,15 @@ public:
     // run journals a window, never the whole thing.
     void set_journal(ledger::Journal* journal) { journal_ = journal; }
 
+    // The log is an *input* to the run, so it is const and outlives the
+    // scheduler. Everything due is applied at month open, before any agent
+    // acts, which is what makes a re-simulation reproduce the same history.
+    void set_interventions(const intervention::Log* log) { interventions_ = log; }
+
+    // Sim builds a throwaway Scheduler per step, so it must say which month
+    // this is -- otherwise the log and the journal both see month 0 forever.
+    void set_month(int month) { months_elapsed_ = month; }
+
     void run_month();
     int months_elapsed() const { return months_elapsed_; }
 
@@ -28,5 +38,6 @@ private:
     World& world_;
     Rng& rng_;
     ledger::Journal* journal_ = nullptr;
+    const intervention::Log* interventions_ = nullptr;
     int months_elapsed_ = 0;
 };

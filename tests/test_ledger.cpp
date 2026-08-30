@@ -198,7 +198,7 @@ TEST_CASE("a non-issuer may be emptied exactly") {
 TEST_CASE("an issuer may go negative -- that is the money it has issued") {
     Rng rng(22);
     World w = tiny_world(rng);
-    w.issuers.resize(1, 0.0);
+    REQUIRE(w.issuers.size() == 1);
 
     ledger::transfer(w, ledger::issuer(0), ledger::household(0), 500.0);
 
@@ -208,7 +208,7 @@ TEST_CASE("an issuer may go negative -- that is the money it has issued") {
 TEST_CASE("issuance raises circulation but leaves the books balanced") {
     Rng rng(23);
     World w = tiny_world(rng);
-    w.issuers.resize(1, 0.0);
+    REQUIRE(w.issuers.size() == 1);
 
     const double circulation_before = w.money_in_circulation();
     const double books_before = w.books_balance();
@@ -222,7 +222,8 @@ TEST_CASE("issuance raises circulation but leaves the books balanced") {
 TEST_CASE("circulation excludes issuers, books include them") {
     Rng rng(24);
     World w = tiny_world(rng);
-    w.issuers.resize(1, -400.0);
+    REQUIRE(w.issuers.size() == 1);  // every World has the 'outside' account
+    w.issuers[0] = -400.0;
     CHECK(w.books_balance() ==
           doctest::Approx(w.money_in_circulation() - 400.0));
 }

@@ -58,6 +58,7 @@ enum class Reason : uint8_t {
     Purchase,  // household -> firm, a daily shop visit
     Wage,      // firm -> employee, at month close
     Profit,    // firm -> household, the ownership proxy
+    Issuance,  // issuer -> anyone: money entering circulation
 };
 
 // Wages and profits move at month close, outside any day.

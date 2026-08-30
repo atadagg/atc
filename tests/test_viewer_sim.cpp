@@ -2,6 +2,7 @@
 
 #include "doctest.h"
 #include "recorder.hpp"
+#include "intervention.hpp"
 #include "sim.hpp"
 #include "world.hpp"
 
@@ -102,4 +103,28 @@ TEST_CASE("parameters travel with a snapshot") {
     s.world.params.productivity = 11.0;
     sim.restore(s);
     CHECK(sim.world().params.productivity == doctest::Approx(11.0));
+}
+
+TEST_CASE("scrubbing back across an intervention replays it identically") {
+    intervention::Log log;
+    log.set_param(60, "min_wage", 12.0);
+    log.set_param(60, "productivity", 3.5);
+
+    Sim sim(1, &log);
+    sim.step(80);
+
+    const double liquidity_at_80 = sim.world().households[0].liquidity;
+    const double wage_at_80 = sim.world().firms[0].wage;
+    CHECK(sim.world().params.min_wage == doctest::Approx(12.0));
+
+    // Back before the intervention: the old parameters must be restored, not
+    // carried backward from the future.
+    sim.seek(40);
+    CHECK(sim.world().params.min_wage == doctest::Approx(1.0));
+
+    // Forward again through it: byte-identical history, or the scrub is a lie.
+    sim.seek(80);
+    CHECK(sim.world().params.min_wage == doctest::Approx(12.0));
+    CHECK(sim.world().households[0].liquidity == liquidity_at_80);
+    CHECK(sim.world().firms[0].wage == wage_at_80);
 }

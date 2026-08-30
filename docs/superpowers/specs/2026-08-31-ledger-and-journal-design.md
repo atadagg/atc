@@ -1,6 +1,7 @@
 # The financial substrate: ledger, journal, and intervention log
 
-Status: **Parts 1, 2 and 3 are implemented and merged. Part 4 is design.**
+Status: **All four parts implemented and merged.** What remains is the first
+consumer (viewer steering) and log serialization.
 
 ## Read this first, in plain language
 
@@ -287,7 +288,16 @@ would be some 855 million entries.
 
 ## Part 4 — the intervention log
 
-**Design. Not implemented.**
+**Implemented.** `src/intervention.{hpp,cpp}`, applied by
+`Scheduler::run_month` at month open, carried by `Sim`.
+
+Two notes from building it. **Parameters are addressed by a table, not a
+parallel enum** — `param_specs()` is one `constexpr` array of
+`{name, set, get}` and an id is an index into it, because a second list of ids
+would drift and a drifted entry steers the *wrong knob* rather than failing to
+compile. And **`Sim` had to learn what month it is**: it builds a throwaway
+`Scheduler` per step, so without `set_month` both the log and the journal saw
+month 0 forever — a latent journal-timestamp bug, now fixed.
 
 ### The problem
 
@@ -425,9 +435,12 @@ Part 2 — the two are the same piece of arithmetic.
 3. ~~Split `params.hpp` into structural and behavioural~~ — **done**
 4. ~~Part 2: distribution tail, issuer kinds, solvency enforcement, the
    `books_balance()` / `money_in_circulation()` split~~ — **done**
-5. **Part 4**: `Intervention`, the log, and application at month open.
-6. A scrub-across-an-intervention test (the `Params` half is already done).
+5. ~~Part 4: `Intervention`, the log, and application at month open~~ — **done**
+6. ~~A scrub-across-an-intervention test~~ — **done**
 7. Viewer steering UI — the first consumer, and the reason the rest exists.
+8. Log serialization — a save file is (seed + log). `Intervention` is a plain
+   aggregate and parameters are addressed by name, so the design is ready;
+   the code is not written.
 
 The substrate is now bank-ready: an extension that creates money needs an
 issuer account and nothing else from this document.

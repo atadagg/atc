@@ -11,6 +11,13 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
         throw std::invalid_argument("World: n_firms must be > 0");
     }
 
+    // One issuer account, balance zero, representing what is outside the
+    // modelled economy. Lengnick v1 never touches it, so the money supply is
+    // constant -- but the account exists, so an extension that creates money
+    // (a bank, a government) needs no new machinery, and a money injection is
+    // an ordinary balanced transfer rather than an exception to invariant 1.
+    issuers.assign(1, 0.0);
+
     firms.resize(n_firms);
     households.resize(n_households);
 

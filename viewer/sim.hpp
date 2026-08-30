@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "intervention.hpp"
 #include "rng.hpp"
 #include "world.hpp"
 
@@ -24,7 +25,11 @@ struct SimSnapshot {
 // references into itself, which is what makes restore() a plain assignment.
 class Sim {
 public:
-    explicit Sim(uint64_t seed);
+    // `log` is an input to the run and must outlive the Sim. It may be
+    // appended to between steps (that is what a steering UI does); entries for
+    // months already simulated are not retroactively applied -- seek back
+    // through them and forward again to see their effect.
+    explicit Sim(uint64_t seed, const intervention::Log* log = nullptr);
 
     Sim(const Sim&) = delete;
     Sim& operator=(const Sim&) = delete;
@@ -54,6 +59,7 @@ private:
     void maybe_retain_snapshot();
 
     uint64_t seed_;
+    const intervention::Log* interventions_ = nullptr;
     Rng rng_;
     World world_;
     int month_ = 0;

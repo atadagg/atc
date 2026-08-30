@@ -18,10 +18,13 @@ public:
     std::vector<Household> households;
 
     // Accounts that are allowed to go negative. An issuer's negative balance
-    // is the money it has issued. Empty in Lengnick v1, which has no issuers
-    // and therefore a constant money supply -- a property of that model, not
-    // of the engine. A bank extension gives these balances an agent; until
-    // then they are bare accounts, which is all the invariant needs.
+    // is not a deficit: it is the money it has issued.
+    //
+    // A World is constructed with exactly one, balance zero, standing for what
+    // is outside the modelled economy. Lengnick v1 never touches it, so the
+    // money supply is constant -- a property of that model, not of the engine.
+    // A bank extension gives an issuer behaviour and an agent; the invariant
+    // needs only the balance.
     std::vector<double> issuers;
 
     // Behavioural parameters for this run. Runtime state rather than

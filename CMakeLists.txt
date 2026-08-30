@@ -16,6 +16,7 @@ add_library(economy_core
     src/rng.cpp
     src/world.cpp
     src/ledger.cpp
+    src/intervention.cpp
     src/network.cpp
     src/firm_decisions.cpp
     src/household_decisions.cpp
@@ -45,6 +46,7 @@ add_executable(economy_tests
     tests/test_world.cpp
     tests/test_ledger.cpp
     tests/test_params.cpp
+    tests/test_intervention.cpp
     tests/test_network.cpp
     tests/test_firm_decisions.cpp
     tests/test_household_decisions.cpp

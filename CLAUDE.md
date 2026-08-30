@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 180 cases
+./build/economy_tests                              # 189 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 ```
@@ -128,7 +128,8 @@ promoted ahead of the §8 extensions — see Next work, and
 | `household_decisions.{hpp,cpp}` | Monthly: shop search, job search, consumption budget |
 | `daily.{hpp,cpp}` | Daily: shopping, then production |
 | `month_close.{hpp,cpp}` | Wages, profits, reservation wages, deferred fires, demand rollover |
-| `scheduler.{hpp,cpp}` | The day/month tick |
+| `intervention.{hpp,cpp}` | The intervention log: `Params` table, `Intervention`, `Log`, `apply` |
+| `scheduler.{hpp,cpp}` | The day/month tick; applies due interventions at month open |
 | `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Also `CsvJournal`, the ledger's file sink. |
 | `main.cpp` | CLI. The only file permitted console I/O. |
 
@@ -236,7 +237,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 180 tests, 437,087 assertions.
+v1 complete and merged. 189 tests, 437,164 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
 confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
@@ -352,6 +353,48 @@ Same rounding-path story as the chokepoint commit: the trajectory moved, the
 economics did not. **Enforcement cost nothing measurable** — the run is if
 anything marginally faster, well inside the spec's 2% budget, despite a branch
 on all ~855M transfers. Determinism re-verified.
+
+### Done: the intervention log (Part 4 of the ledger spec)
+
+**A run is now (seed + intervention log), not seed alone.** That is what lets a
+parameter change mid-run without breaking invariant 2, and it is the blocker
+that kept viewer steering unimplemented.
+
+- `intervention::Log` is append-only, kept sorted by `(month, seq)`. `seq` is
+  monotonic across the whole log and is load-bearing: two changes in the same
+  month need a defined order, or nondeterminism returns at a finer grain than
+  the one the log exists to remove.
+- `Scheduler::run_month` applies everything due **at month open, before any
+  agent acts**. Applying mid-month would make the outcome depend on where in
+  the tick the change landed.
+- Three actions: `SetParam`, `Issue` (issuer → one household),
+  `IssueToAllHouseholds`. An injection is an ordinary balanced transfer with
+  `Reason::Issuance`, so it appears in the journal like anything else and needs
+  **no exception to invariant 1**.
+- `Sim` takes an optional log and passes it to each throwaway `Scheduler`,
+  along with the month — `Sim` builds a fresh `Scheduler` per step, so without
+  `set_month` the log and the journal would both see month 0 forever. That was
+  a latent journal-timestamp bug under the viewer; it is fixed.
+
+**Parameters are addressed by a table, not a parallel enum.**
+`intervention::param_specs()` is one `constexpr` array of
+`{name, set, get}`, and a parameter id is an index into it. There is
+deliberately no second list of ids to drift out of sync — a drifted entry would
+silently steer the *wrong knob* rather than fail to compile. Names are the
+stable identity for a future save file; the index is the compact in-memory
+form. Integer parameters convert once, inside the table row.
+
+**Every `World` now has one issuer account**, balance zero, standing for what
+is outside the modelled economy. v1 never touches it, so the money supply stays
+constant. It exists so that money creation needs no new machinery when a bank
+arrives, and so the injection path is testable today.
+
+The scrub test is the one that matters: set two parameters at month 60, run to
+80, scrub back to 40 (parameters revert — they travel in the snapshot), scrub
+forward to 80 again, and the state is **byte-identical** to the first pass.
+
+No interventions leaves the reference run byte-identical, at 13.3 s. (Discard
+the first timed run after a rebuild — it reads ~18 s cold.)
 
 ### Measured performance baseline
 
@@ -593,32 +636,18 @@ pieces that make everything after them cheaper, and both get harder once more
 modules move money. See
 `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`.
 
-Steps 1–3 of the spec's order of work are **done** (see Status):
-`transfer`, journaling, and the `constexpr`/`Params` split. What remains:
+Parts 1–4 of the spec are **done** (see Status): the `transfer` chokepoint, journaling,
+the `constexpr`/`Params` split, issuers with enforced solvency, and the
+intervention log. The substrate is bank-ready: an extension that creates money
+needs an issuer account and nothing else from that document. What remains:
 
-- **Issuers and enforced solvency** (spec Part 2, step 4). `Kind` gains
-  issuer kinds, `may_issue(Kind)` decides who may go negative, `transfer`
-  rejects a movement that would push a *non*-issuer below zero, and
-  `total_money()` splits into `books_balance()` (an assertion) and
-  `money_in_circulation()` (a measurement). This is the prerequisite for
-  any bank extension, and it is what lets a money injection exist without
-  an exception to invariant 1.
-
-  **Gated on a measurement.** `pay_wages` now leaves a machine-epsilon
-  residue (N shares need not sum to what the firm held), and `daily::shop`
-  already carries a clamp written to stop the same thing. If either rounds
-  the wrong way, enforcement rejects a movement that happens every month in
-  a healthy run. Measure the sign before enabling it; the fix is named in
-  the spec (the last recipient takes the exact remainder). Also measure the
-  cost — see the spec's Part 5 budget.
-- **`Intervention`, the log, and scheduler application at month open**
-  (spec step 5). A run becomes *(seed, log)* rather than seed alone, which
-  is what lets parameters change mid-run without breaking invariant 2. The
-  `Params` half of the prerequisite is already in place and already inside
-  `SimSnapshot`, so step 6 is reduced to writing the
-  scrub-across-an-intervention test.
 - **Viewer steering UI** (spec step 7) — the first consumer, and the reason
-  the rest exists.
+  the rest exists. The substrate side is done: the panel needs to append to an
+  `intervention::Log` the `Sim` already holds, and re-seek so the change takes
+  effect at a month boundary.
+- **Log serialization** — not built. `Intervention` is a plain aggregate and
+  parameters are addressed by *name*, so a save file is a small matter of
+  writing the log out; the design is ready for it, the code is not.
 
 ### Extensions, in dependency order
 
