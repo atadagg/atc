@@ -157,14 +157,26 @@ Ordering is load-bearing and subtle:
 
 ## Invariants — do not break these
 
-1. **Money conservation.** `sum(household.liquidity) + sum(firm.liquidity)`
-   is constant. Drift is 0 over the 7000-month reference run (spread 3e-9,
-   which is `total_money()`'s own summation error, not movement). This is now
-   true **by construction**: `ledger::transfer` is the only code that writes
-   `liquidity`, and it does one subtraction and one addition of the same
-   `double`. Do not reintroduce a paired mutation anywhere — a new module that
-   moves money calls `transfer` or it is wrong. If conservation ever breaks,
-   it is the highest-priority bug; do not loosen a tolerance to hide it.
+1. **Every event balances.** Every movement of money has a source and a sink
+   and nets to exactly zero. True **by construction**: `ledger::transfer` is
+   the only code that writes `liquidity`, and it does one subtraction and one
+   addition of the same `double`. Do not reintroduce a paired mutation
+   anywhere — a new module that moves money calls `transfer` or it is wrong.
+   **This invariant has no exceptions**, and none may be added: money is never
+   created by a movement, only by issuance, which is itself a balanced
+   movement out of an issuer account. If a feature seems to need an exception,
+   it is missing an issuer, not entitled to one.
+
+   *Corollary, true only while the model has no issuers* — which Lengnick v1
+   is: the sum of all balances is constant. Drift is 0 over the 7000-month
+   reference run (spread 3e-9, which is `total_money()`'s own summation error,
+   not movement). **This is a property of the model, not of the engine.** Do
+   not write it into the engine, and do not assume it survives the bank
+   extension. See `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md`
+   Part 2 for the issuer design and the solvency enforcement that goes with it.
+
+   If the books ever fail to balance, it is the highest-priority bug; do not
+   loosen a tolerance to hide it.
 2. **Determinism.** Same seed → byte-identical run, including randomized
    agent order. All randomness flows through an explicitly passed `Rng&`.
    No `rand()`, no globals, no `std::random_device` outside seeding.
@@ -287,6 +299,22 @@ household, so it is O(firms x households) per month — 100 x 1000 — against
 
 That ratio is itself a finding: almost all recorded money movement in this
 economy is the ownership proxy, not trade.
+
+### Measured performance baseline
+
+Seed 1, burn-in 1000, 6000 measurement months, Release, this machine:
+
+| Quantity | Measured |
+|---|---|
+| Wall clock | **14.3 s** (14.14 / 14.48 / 14.32) |
+| Money movements per month | 122,174 |
+| ⇒ transfers per reference run | ~855 million |
+| Of which profit distribution | ~82% |
+
+Anything added to `transfer` runs ~855 million times per reference run, so
+cost is a requirement rather than an afterthought — the budget is in the
+spec's Part 5. The 82% figure is a share of *movements*, not a profiled share
+of runtime; do not optimize on it without profiling first.
 
 ### Done: structural vs. behavioural parameters (step 3 of the ledger spec)
 
@@ -515,19 +543,29 @@ modules move money. See
 Steps 1–3 of the spec's order of work are **done** (see Status):
 `transfer`, journaling, and the `constexpr`/`Params` split. What remains:
 
+- **Issuers and enforced solvency** (spec Part 2, step 4). `Kind` gains
+  issuer kinds, `may_issue(Kind)` decides who may go negative, `transfer`
+  rejects a movement that would push a *non*-issuer below zero, and
+  `total_money()` splits into `books_balance()` (an assertion) and
+  `money_in_circulation()` (a measurement). This is the prerequisite for
+  any bank extension, and it is what lets a money injection exist without
+  an exception to invariant 1.
+
+  **Gated on a measurement.** `pay_wages` now leaves a machine-epsilon
+  residue (N shares need not sum to what the firm held), and `daily::shop`
+  already carries a clamp written to stop the same thing. If either rounds
+  the wrong way, enforcement rejects a movement that happens every month in
+  a healthy run. Measure the sign before enabling it; the fix is named in
+  the spec (the last recipient takes the exact remainder). Also measure the
+  cost — see the spec's Part 5 budget.
 - **`Intervention`, the log, and scheduler application at month open**
-  (spec step 4). A run becomes *(seed, log)* rather than seed alone, which
+  (spec step 5). A run becomes *(seed, log)* rather than seed alone, which
   is what lets parameters change mid-run without breaking invariant 2. The
   `Params` half of the prerequisite is already in place and already inside
-  `SimSnapshot`, so spec step 5 is reduced to writing the
+  `SimSnapshot`, so step 6 is reduced to writing the
   scrub-across-an-intervention test.
-- **Viewer steering UI** (spec step 6) — the first consumer, and the reason
+- **Viewer steering UI** (spec step 7) — the first consumer, and the reason
   the rest exists.
-
-Note the one decision the spec flags and the log still needs: some
-interventions (a money injection) break invariant 1 *on purpose*, so the
-invariant becomes "money is constant except across logged injections" and
-the check must consult the log. Decide it deliberately when writing step 4.
 
 ### Extensions, in dependency order
 
@@ -571,10 +609,13 @@ not by priority.
 - `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` and
   `docs/superpowers/plans/2026-08-30-viewer-view-model.md` — the viewer's
   view-model layer: what it separates and why a second skin reuses it.
-- `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md` — the
-  `transfer` chokepoint and the intervention log: why they come before the
-  §8 extensions, and the three details in the log design that are easy to
-  get wrong.
+- `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md` — **the
+  financial substrate**: the `transfer` chokepoint and the journal (both
+  built), the balanced-events invariant with issuer accounts and enforced
+  solvency (designed), and the intervention log (designed). Part 0 separates
+  what belongs to the engine from what belongs to Lengnick v1; Part 5 is the
+  measured performance budget. Opens in plain language — read that section
+  first if the accounting vocabulary is unfamiliar.
 - `DESIGN.md` — the originating concept: a magic-capitalism tycoon/grand-
   strategy game. This simulation is the economic substrate that design
   silently assumed. Retained deliberately.
