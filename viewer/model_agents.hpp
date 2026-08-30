@@ -47,6 +47,17 @@ struct LinkGroup {
     std::vector<DetailLink> links;
 };
 
+// Convention, not a rule enforced by the type system: a relationship that
+// can hold zero, one, or many targets (a firm's employees, a household's
+// shops) is a LinkGroup, even when it happens to hold exactly one. A
+// relationship that is inherently singular and optional (a firm's pending
+// fire) is emitted only as an AgentRef DetailField. Both are equally
+// navigable -- the distinction is just where the value lives, not whether
+// it is clickable -- so a household's employer appears as *both* an
+// AgentRef field and a one-element LinkGroup, while pending_fire appears
+// only as a field. This is existing screen behaviour and is not changed
+// here; a skin must not assume a ref field's target is absent from groups.
+//
 // What a skin needs to render the selected agent. The link graph is data;
 // only the button is ImGui.
 struct DetailModel {

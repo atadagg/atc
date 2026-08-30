@@ -19,4 +19,7 @@ std::span<const DistSpec> distributions();
 
 // The values behind distributions()[which], one per agent, in agent-index
 // order -- so a Histogram's members index straight back into the world.
+// Out-of-range `which` falls through to the last distribution rather than
+// reading out of bounds, matching firm_cell/household_cell in
+// model_agents.hpp.
 std::vector<double> dist_values(const World& w, int which);

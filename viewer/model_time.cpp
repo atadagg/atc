@@ -25,3 +25,17 @@ std::vector<double> series_values(const RingRecorder& r, const SeriesSpec& s) {
     for (size_t i = 0; i < r.size(); ++i) v.push_back(r.at(i).*s.field);
     return v;
 }
+
+ScrubBounds scrub_bounds(int max_month) {
+    ScrubBounds b;
+    b.lo = 0;
+    b.hi = max_month;
+    b.enabled = max_month > 0;
+    return b;
+}
+
+int clamp_to_bounds(const ScrubBounds& b, int requested) {
+    if (requested < b.lo) return b.lo;
+    if (requested > b.hi) return b.hi;
+    return requested;
+}

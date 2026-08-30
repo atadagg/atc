@@ -67,3 +67,26 @@ TEST_CASE("an empty ring yields an empty series rather than throwing") {
     const RingRecorder r(4);
     CHECK(series_values(r, series()[0]).empty());
 }
+
+TEST_CASE("scrub bounds are disabled before the run has advanced") {
+    const ScrubBounds b = scrub_bounds(0);
+    CHECK_FALSE(b.enabled);
+    CHECK(b.lo == 0);
+    CHECK(b.hi == 0);
+}
+
+TEST_CASE("scrub bounds track max_month, not the displayed month") {
+    // A backward seek must not shrink the control's own ceiling -- hi
+    // follows the furthest month the run has ever reached.
+    const ScrubBounds b = scrub_bounds(120);
+    CHECK(b.enabled);
+    CHECK(b.lo == 0);
+    CHECK(b.hi == 120);
+}
+
+TEST_CASE("clamp_to_bounds pulls a requested month inside the range") {
+    const ScrubBounds b = scrub_bounds(100);
+    CHECK(clamp_to_bounds(b, -5) == 0);
+    CHECK(clamp_to_bounds(b, 200) == 100);
+    CHECK(clamp_to_bounds(b, 42) == 42);
+}

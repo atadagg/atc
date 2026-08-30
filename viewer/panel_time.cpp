@@ -8,14 +8,19 @@
 namespace {
 
 void plot(const RingRecorder& r, const SeriesSpec& s) {
-    const std::vector<double> values = series_values(r, s);
-    if (values.size() < 2) {
+    const size_t n = r.size();
+    if (n < 2) {
         ImGui::TextDisabled("%s: not enough months yet", s.name);
         return;
     }
+    // Built directly into the float buffer ImGui::PlotLines wants, rather
+    // than through series_values()'s double vector -- that would be a
+    // second ~4096-entry allocation per series, per frame.
     std::vector<float> v;
-    v.reserve(values.size());
-    for (double d : values) v.push_back(static_cast<float>(d));
+    v.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        v.push_back(static_cast<float>(r.at(i).*s.field));
+    }
     ImGui::PlotLines(s.name, v.data(), static_cast<int>(v.size()), 0, nullptr,
                      FLT_MAX, FLT_MAX, ImVec2(0, 60));
 }
@@ -25,20 +30,16 @@ void plot(const RingRecorder& r, const SeriesSpec& s) {
 void draw_time_panel(App& app) {
     ImGui::Begin("time");
 
-    // The scrub bar ranges over every month the run has ever reached
-    // (max_month), not app.sim.month() -- sim.month() is whatever is
-    // currently displayed and shrinks on a backward seek, which would
-    // otherwise shrink the slider's own ceiling and make it impossible to
-    // scrub forward again after one seek back.
+    // See ScrubBounds in model_time.hpp for why the slider's ceiling is
+    // max_month rather than the currently displayed month.
+    const ScrubBounds bounds = scrub_bounds(app.max_month);
     int month = app.sim.month();
     ImGui::SetNextItemWidth(-120.0f);
-    if (app.max_month > 0) {
+    if (bounds.enabled) {
         // Seeking backward restores the nearest snapshot and re-simulates
         // forward, so what is shown is real state, not interpolation.
-        if (ImGui::SliderInt("month", &month, 0, app.max_month)) {
-            if (month < 0) month = 0;
-            if (month > app.max_month) month = app.max_month;
-            app.seek_to(month);
+        if (ImGui::SliderInt("month", &month, bounds.lo, bounds.hi)) {
+            app.seek_to(clamp_to_bounds(bounds, month));
         }
     } else {
         ImGui::BeginDisabled();

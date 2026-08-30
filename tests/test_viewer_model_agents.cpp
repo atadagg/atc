@@ -15,7 +15,7 @@ World tiny_world() {
     // Three firms is below kShopsPerHousehold, so household shops repeat;
     // that is the documented test-only configuration, and no firm test
     // reads shops.
-    static Rng rng(1);
+    Rng rng(1);
     World w(3, 3, rng);
     w.firms[0].wage = 10.0;
     w.firms[0].price = 1.0;
@@ -143,7 +143,7 @@ TEST_CASE("the firm id column is a navigable reference") {
 namespace {
 
 World household_world() {
-    static Rng rng(2);
+    Rng rng(2);
     World w(3, 2, rng);
     w.households[0].employer = 1u;
     w.households[0].liquidity = 10.0;
