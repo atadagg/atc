@@ -342,6 +342,13 @@ household, so it is O(firms x households) per month — 100 x 1000 — against
 That ratio is itself a finding: almost all recorded money movement in this
 economy is the ownership proxy, not trade.
 
+**Movement count and monetary significance are unrelated**, which the stimulus
+scenario shows cleanly. Over that run's journal window: profit 82.0% of
+movements but 54,089 in value; purchases 16.9% / 204,041; wages 0.9% / 149,685;
+**issuance 0.3% of movements and 50,000 in value — a third of all money in
+circulation, in 1,000 rows.** Worth remembering once the bank extension makes
+issuance routine: counting entries will not tell you where the money is.
+
 ### Done: issuers and enforced solvency (Part 2 of the ledger spec)
 
 The engine no longer assumes a fixed money stock.
@@ -525,15 +532,24 @@ ensemble (`scripts/ensemble.py --seeds 20`, 6000 post-burn-in months each):
 | Gini mean | 0.0145 | 0.0007 | 0.0123 | 0.0156 |
 | books spread | 2.26e-9 | 7e-10 | 1.11e-9 | 4.00e-9 |
 
-Criteria 2 and 3 hold on **20/20** seeds. Criterion 1 fails on all of them —
+Re-run at 50 seeds the table is essentially identical (Phillips −0.4362,
+Beveridge −0.6183, Gini mean 0.0145), so **20 seeds is enough for this model** —
+worth knowing before spending 50-run wall clock by default.
+
+Criteria 2 and 3 hold on **20/20** seeds, and on 50/50 at n=50. Criterion 1 fails on all of them —
 the low mean and narrow range are structural, not a seed artifact, which
 strengthens the demand-leakage explanation.
 
-**Correction to criterion 4.** Seed 1 shows the wealth gap *narrowing* (early
-0.0168 → late 0.0121) and this file said so. Across 20 seeds it **widens**:
-early 0.0137 → late 0.0152, and late ≥ half of early on 20/20. The falling
-trend was a one-seed artifact. Criterion 4 passes more convincingly than
-previously recorded.
+**Correction to criterion 4, and how to state it.** Seed 1 shows the wealth gap
+*narrowing* (early 0.0168 → late 0.0121) and this file said so. That was a
+one-seed artifact: the gap **widens on 39 of 50 seeds, paired t = 3.1**
+(mean late − early = +0.00088, sd 0.00204, n=50).
+
+State it that way and not as a difference of two ensemble means. The between-
+seed sd (0.0015) is larger than the gap between the means (0.0141 → 0.0149), so
+comparing the means reads as noise and invites the opposite conclusion from the
+same data. The comparison has to be **paired per seed**, because early and late
+come from the same run. The effect is real, and small.
 
 ### Measured performance baseline
 
@@ -647,11 +663,27 @@ fire → wage cut at the next unaffordable payroll → drift back to the floor.
 Post-fix the firm population churns instead of stratifying, measured over
 6000 post-burn-in months: **no firm is empty in more than 90% of months, no
 firm is never empty, and all 100 reach 10+ staff at some point**. A firm is
-empty 16% of months on average and recovers. At month 7219, 1000 of 1000
+empty ~14% of months on average and recovers. At month 7219, 1000 of 1000
 households are employed with 42 vacancies open — the empty firms are
-mid-turnover, not stranded. Staff still bunch (~14 per staffed firm against
-Lengnick's ~10) because one worker produces 63 units/month and hiring is
-therefore chunky; that is the model's arithmetic, not a defect.
+mid-turnover, not stranded.
+
+**Firm size: 11.7 per staffed firm, not the ~14 previously recorded.** That
+number was a point sample taken too close to burn-in. Sampled every 100 months
+across the measurement window (60 samples x 3 seeds):
+
+| Quantity | mean | range across samples |
+|---|---|---|
+| staff per staffed firm | **11.7–12.0** | 10.0 – 16.4 |
+| empty firms (of 100) | 14.1–16.3 | 1 – 39 |
+| largest firm | 32–33 | 24 – 51 |
+| employed households | 996–997 | — |
+
+Two prior claims were both wrong, in opposite directions: ~14 was a burn-in
+artifact, and a single sample at month 3000 reading 10.4 caught the *bottom* of
+the range. The chunky-hiring explanation survives but is much weaker than it
+was stated — one worker produces 63 units/month, so hiring is lumpy and the
+steady state sits ~17% above Lengnick's ~10 rather than ~40% above. Do not
+quote a firm-size figure from a single month.
 
 **And it was propping up the criteria.** The cycling and the wealth
 dispersion that criteria 1 and 4 were measuring were substantially two
