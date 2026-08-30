@@ -270,10 +270,14 @@ Ordering is load-bearing and subtle:
 
 v1 complete and merged. 205 tests, 437,351 assertions.
 
-**Criterion 1 fails; 2, 3 and 4 pass** (seed 1, burn-in 1000, 6000 months;
-confirmed on seeds 2/3/4). This is a *correction* of an earlier "all four
-pass" — see "Resolved: the size-weighted draw on the rationed path" below.
-The earlier pass was produced by a network bug, not by the economics.
+**Criterion 1 fails; 2, 3 and 4 pass** — now confirmed across **20 seeds**, not
+inferred from one; see "Criteria across 20 seeds" below, which also corrects
+the direction of criterion 4's trend. The table below is seed 1 and is kept
+because it is what the rewiring-bug comparison was measured on.
+
+This is a *correction* of an earlier "all four pass" — see "Resolved: the
+size-weighted draw on the rationed path" below. The earlier pass was produced
+by a network bug, not by the economics.
 
 | Criterion | With the rewiring bug | Corrected |
 |---|---|---|
