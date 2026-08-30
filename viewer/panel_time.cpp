@@ -3,18 +3,20 @@
 
 #include "app.hpp"
 #include "imgui.h"
+#include "model_time.hpp"
 
 namespace {
 
-void plot(const RingRecorder& r, const char* name, double Metrics::* field) {
-    if (r.size() < 2) {
-        ImGui::TextDisabled("%s: not enough months yet", name);
+void plot(const RingRecorder& r, const SeriesSpec& s) {
+    const std::vector<double> values = series_values(r, s);
+    if (values.size() < 2) {
+        ImGui::TextDisabled("%s: not enough months yet", s.name);
         return;
     }
     std::vector<float> v;
-    v.reserve(r.size());
-    for (size_t i = 0; i < r.size(); ++i) v.push_back(static_cast<float>(r.at(i).*field));
-    ImGui::PlotLines(name, v.data(), static_cast<int>(v.size()), 0, nullptr,
+    v.reserve(values.size());
+    for (double d : values) v.push_back(static_cast<float>(d));
+    ImGui::PlotLines(s.name, v.data(), static_cast<int>(v.size()), 0, nullptr,
                      FLT_MAX, FLT_MAX, ImVec2(0, 60));
 }
 
@@ -51,12 +53,7 @@ void draw_time_panel(App& app) {
     ImGui::TextDisabled("showing month %d of %d", app.sim.month(), app.max_month);
 
     ImGui::SeparatorText("recorded since the last seek");
-    plot(app.metrics, "unemployment", &Metrics::unemployment_rate);
-    plot(app.metrics, "mean wage", &Metrics::mean_wage);
-    plot(app.metrics, "mean price", &Metrics::mean_price);
-    plot(app.metrics, "gini", &Metrics::gini);
-    plot(app.metrics, "inventory", &Metrics::inventory);
-    plot(app.metrics, "planned consumption", &Metrics::planned_consumption);
+    for (const SeriesSpec& s : series()) plot(app.metrics, s);
 
     ImGui::End();
 }
