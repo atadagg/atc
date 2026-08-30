@@ -1,0 +1,8 @@
+Dear ImGui (docking branch)
+
+Source:  https://github.com/ocornut/imgui
+Tag:     v1.92.9b-docking
+Commit:  9acdfbf46810c0c74ab281ce04122c4149ae8bd1
+
+Vendored verbatim, unmodified. Licensed under the MIT License — see
+LICENSE.txt in this directory, fetched from the same tag.
