@@ -19,3 +19,10 @@ std::vector<uint32_t> firm_rows(const World& w, const Filters& f, SortSpec sort)
 // One cell. `col` indexes firm_columns(). Out-of-range columns return the
 // last column rather than reading out of bounds.
 Cell firm_cell(const World& w, uint32_t firm, int col);
+
+// The household table's schema. Column identity is the index into this span.
+std::span<const ColumnSpec> household_columns();
+
+std::vector<uint32_t> household_rows(const World& w, const Filters& f, SortSpec sort);
+
+Cell household_cell(const World& w, uint32_t household, int col);

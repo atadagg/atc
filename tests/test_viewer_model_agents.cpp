@@ -1,5 +1,6 @@
 #include <vector>
 
+#include "agents.hpp"
 #include "doctest.h"
 #include "model_agents.hpp"
 #include "params.hpp"
@@ -137,4 +138,68 @@ TEST_CASE("the firm id column is a navigable reference") {
     const Cell id = firm_cell(w, 2u, 0);
     CHECK(id.kind == CellKind::AgentRef);
     CHECK(id.ref == 2u);
+}
+
+namespace {
+
+World household_world() {
+    static Rng rng(2);
+    World w(3, 2, rng);
+    w.households[0].employer = 1u;
+    w.households[0].liquidity = 10.0;
+    w.households[0].reservation_wage = 5.0;
+    w.households[0].planned_consumption = 2.0;
+
+    w.households[1].employer = NO_FIRM;  // unemployed
+    w.households[1].liquidity = 20.0;
+    w.households[1].reservation_wage = 6.0;
+    w.households[1].planned_consumption = 3.0;
+
+    w.households[2].employer = 0u;
+    w.households[2].liquidity = 30.0;
+    w.households[2].reservation_wage = 7.0;
+    w.households[2].planned_consumption = 4.0;
+    return w;
+}
+
+}  // namespace
+
+TEST_CASE("the household schema and cell accessor agree on column count") {
+    const World w = household_world();
+    const auto cols = household_columns();
+    REQUIRE(cols.size() == 5);
+    for (int c = 0; c < static_cast<int>(cols.size()); ++c) {
+        const Cell cell = household_cell(w, 0u, c);
+        CHECK(cell.kind == cols[static_cast<size_t>(c)].kind);
+    }
+}
+
+TEST_CASE("an unemployed household's employer is Missing, not a sentinel") {
+    const World w = household_world();
+    const Cell employed = household_cell(w, 0u, 1);
+    CHECK(employed.kind == CellKind::AgentRef);
+    CHECK(employed.ref == 1u);
+
+    const Cell jobless = household_cell(w, 1u, 1);
+    CHECK(jobless.kind == CellKind::Missing);
+}
+
+TEST_CASE("the unemployed filter selects only the jobless") {
+    const World w = household_world();
+    Filters f;
+    f.unemployed = true;
+    const std::vector<uint32_t> rows = household_rows(w, f, SortSpec{});
+    REQUIRE(rows.size() == 1);
+    CHECK(rows[0] == 1u);
+}
+
+TEST_CASE("sorting households on employer puts the unemployed first") {
+    // The point of Missing: 0xFFFFFFFF would otherwise sort the jobless to
+    // the top as if they had the highest-numbered employer in the world.
+    const World w = household_world();
+    const std::vector<uint32_t> rows = household_rows(w, Filters{}, SortSpec{1, true});
+    REQUIRE(rows.size() == 3);
+    CHECK(rows[0] == 1u);  // unemployed
+    CHECK(rows[1] == 2u);  // employer 0
+    CHECK(rows[2] == 0u);  // employer 1
 }

@@ -19,6 +19,17 @@ constexpr ColumnSpec kFirmColumns[] = {
     {"demand",    CellKind::Number,   1, true},
 };
 
+// Not sortable: the current table offers no sort. household_rows still
+// honours a SortSpec -- whether to expose sorting is a skin's decision, and
+// the model should not foreclose it.
+constexpr ColumnSpec kHouseholdColumns[] = {
+    {"household",           CellKind::AgentRef, 0, false},
+    {"employer",            CellKind::AgentRef, 0, false},
+    {"liquidity",           CellKind::Number,   2, false},
+    {"reservation wage",    CellKind::Number,   2, false},
+    {"planned consumption", CellKind::Number,   2, false},
+};
+
 bool firm_passes(const Filters& f, uint32_t i, const Firm& firm) {
     if (!f.pinned_firms.empty() &&
         std::find(f.pinned_firms.begin(), f.pinned_firms.end(), i) == f.pinned_firms.end()) {
@@ -65,6 +76,42 @@ std::vector<uint32_t> firm_rows(const World& w, const Filters& f, SortSpec sort)
     std::stable_sort(rows.begin(), rows.end(), [&](uint32_t a, uint32_t b) {
         const Cell ca = firm_cell(w, a, sort.column);
         const Cell cb = firm_cell(w, b, sort.column);
+        return sort.ascending ? cell_less(ca, cb) : cell_less(cb, ca);
+    });
+    return rows;
+}
+
+std::span<const ColumnSpec> household_columns() {
+    return std::span<const ColumnSpec>(kHouseholdColumns);
+}
+
+Cell household_cell(const World& w, uint32_t household, int col) {
+    const Household& h = w.households[household];
+    switch (col) {
+        case 0: return ref_cell(household);
+        // Absence as a value. The sentinel must never reach a skin, which
+        // would print 4294967295 or sort it as the largest employer index.
+        case 1: return h.employed() ? ref_cell(h.employer) : missing_cell();
+        case 2: return number_cell(h.liquidity, 2);
+        case 3: return number_cell(h.reservation_wage, 2);
+        default: return number_cell(h.planned_consumption, 2);
+    }
+}
+
+std::vector<uint32_t> household_rows(const World& w, const Filters& f, SortSpec sort) {
+    std::vector<uint32_t> rows;
+    rows.reserve(w.households.size());
+    for (uint32_t i = 0; i < w.households.size(); ++i) {
+        if (f.unemployed && w.households[i].employed()) continue;
+        rows.push_back(i);
+    }
+
+    const int columns = static_cast<int>(household_columns().size());
+    if (sort.column < 0 || sort.column >= columns) return rows;
+
+    std::stable_sort(rows.begin(), rows.end(), [&](uint32_t a, uint32_t b) {
+        const Cell ca = household_cell(w, a, sort.column);
+        const Cell cb = household_cell(w, b, sort.column);
         return sort.ascending ? cell_less(ca, cb) : cell_less(cb, ca);
     });
     return rows;
