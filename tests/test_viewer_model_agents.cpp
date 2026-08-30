@@ -203,3 +203,71 @@ TEST_CASE("sorting households on employer puts the unemployed first") {
     CHECK(rows[1] == 2u);  // employer 0
     CHECK(rows[2] == 0u);  // employer 1
 }
+
+TEST_CASE("a firm detail lists its fields and its employees as links") {
+    World w = tiny_world();
+    w.firms[2].demand_this_month = 4.0;
+    w.firms[2].months_fully_staffed = 3u;
+    w.firms[2].pending_fire = 1u;
+
+    const DetailModel d = firm_detail(w, 2u);
+    REQUIRE(d.present);
+    CHECK(d.kind == AgentKind::Firm);
+    CHECK(d.id == 2u);
+    CHECK_FALSE(d.fields.empty());
+
+    REQUIRE(d.groups.size() == 1);
+    CHECK(d.groups[0].links.size() == 2);
+    CHECK(d.groups[0].links[0].target == 0u);
+    CHECK(d.groups[0].links[0].kind == AgentKind::Household);
+    CHECK_FALSE(d.groups[0].links[0].has_annotation);
+}
+
+TEST_CASE("a firm with no pending fire omits that field") {
+    World w = tiny_world();
+    w.firms[0].pending_fire = NO_HOUSEHOLD;
+    const DetailModel absent = firm_detail(w, 0u);
+
+    w.firms[0].pending_fire = 1u;
+    const DetailModel present = firm_detail(w, 0u);
+
+    CHECK(present.fields.size() == absent.fields.size() + 1);
+}
+
+TEST_CASE("an out-of-range or sentinel selection yields an absent detail") {
+    const World w = tiny_world();
+    CHECK_FALSE(firm_detail(w, NO_FIRM).present);
+    CHECK_FALSE(firm_detail(w, 99u).present);
+    CHECK_FALSE(household_detail(w, NO_HOUSEHOLD).present);
+}
+
+TEST_CASE("a household detail annotates shops with unmet demand") {
+    World w = household_world();
+    w.households[0].shops[0] = 1u;
+    w.households[0].unsatisfied[0] = 2.5;
+    w.households[0].unsatisfied[1] = 0.0;
+
+    const DetailModel d = household_detail(w, 0u);
+    REQUIRE(d.present);
+    CHECK(d.kind == AgentKind::Household);
+
+    // Two groups: the employer, then the shops.
+    REQUIRE(d.groups.size() == 2);
+    REQUIRE(d.groups[0].links.size() == 1);
+    CHECK(d.groups[0].links[0].target == 1u);
+    CHECK(d.groups[0].links[0].kind == AgentKind::Firm);
+
+    const LinkGroup& shops = d.groups[1];
+    REQUIRE(shops.links.size() == params::kShopsPerHousehold);
+    CHECK(shops.links[0].target == 1u);
+    CHECK(shops.links[0].has_annotation);
+    CHECK(shops.links[0].annotation == doctest::Approx(2.5));
+    CHECK_FALSE(shops.links[1].has_annotation);
+}
+
+TEST_CASE("an unemployed household has no employer link group") {
+    const World w = household_world();
+    const DetailModel d = household_detail(w, 1u);
+    REQUIRE(d.present);
+    REQUIRE(d.groups.size() == 1);  // shops only
+}

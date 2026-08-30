@@ -26,3 +26,36 @@ std::span<const ColumnSpec> household_columns();
 std::vector<uint32_t> household_rows(const World& w, const Filters& f, SortSpec sort);
 
 Cell household_cell(const World& w, uint32_t household, int col);
+
+struct DetailField {
+    const char* label;
+    Cell value;
+};
+
+// A navigable reference out of a detail view. The annotation carries a
+// number that belongs to the link rather than to the target -- a shop's
+// unmet demand, for instance.
+struct DetailLink {
+    uint32_t target;
+    AgentKind kind;
+    bool has_annotation;
+    double annotation;
+};
+
+struct LinkGroup {
+    const char* label;
+    std::vector<DetailLink> links;
+};
+
+// What a skin needs to render the selected agent. The link graph is data;
+// only the button is ImGui.
+struct DetailModel {
+    bool present = false;  // false when nothing valid is selected
+    AgentKind kind = AgentKind::Firm;
+    uint32_t id = 0;
+    std::vector<DetailField> fields;
+    std::vector<LinkGroup> groups;
+};
+
+DetailModel firm_detail(const World& w, uint32_t firm);
+DetailModel household_detail(const World& w, uint32_t household);
