@@ -44,9 +44,12 @@ def run_one(binary, seed, burn_in, months, out_dir):
          "--months", str(months), "--out", str(out)],
         capture_output=True, text=True,
     )
-    if proc.returncode != 0:
-        raise SystemExit(f"ensemble: seed {seed} failed:\n{proc.stderr}")
-    return seed, compute(load(out))
+    if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        # A seed that dies is a finding, not a reason to abandon the other
+        # nineteen: the failure rate across seeds is exactly what an ensemble
+        # is for. Report it and carry on.
+        return seed, None, (proc.stderr or "").strip().splitlines()[-1:] or ["no output"]
+    return seed, compute(load(out)), None
 
 
 def main():
@@ -73,14 +76,29 @@ def main():
     print()
 
     results = {}
+    failures = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [pool.submit(run_one, args.binary, s, args.burn_in,
                                args.months, out_dir) for s in seeds]
         for done in concurrent.futures.as_completed(futures):
-            seed, c = done.result()
-            results[seed] = c
-            print(f"  seed {seed} done ({len(results)}/{len(seeds)})", flush=True)
+            seed, c, err = done.result()
+            if c is None:
+                failures[seed] = err[-1]
+                print(f"  seed {seed} FAILED: {err[-1]}", flush=True)
+            else:
+                results[seed] = c
+            print(f"  {len(results)} ok, {len(failures)} failed "
+                  f"of {len(seeds)}", flush=True)
     print()
+
+    if failures:
+        print(f"{len(failures)} of {len(seeds)} seeds did not complete:")
+        for seed in sorted(failures):
+            print(f"  seed {seed}: {failures[seed]}")
+        print()
+    if not results:
+        raise SystemExit("ensemble: no seed completed")
+    seeds = sorted(results)
 
     width = max(len(label) for _, label, _ in REPORTED)
     print(f"{'':<{width}}  {'mean':>12} {'sd':>12} {'min':>12} {'max':>12}")
