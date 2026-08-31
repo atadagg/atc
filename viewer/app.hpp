@@ -7,6 +7,7 @@
 
 #include "agents.hpp"
 #include "cell.hpp"
+#include "identity_lexicon.hpp"
 #include "intervention.hpp"
 #include "ring_recorder.hpp"
 #include "sim.hpp"
@@ -42,6 +43,13 @@ struct App {
     uint32_t selected_household = NO_HOUSEHOLD;
 
     Filters filters;
+
+    // Which lexicon firm names are drawn from. A parameter of the name
+    // function, never a field on Firm -- when regions arrive, the region
+    // supplies it. Turkish because it is the only speaker-verified locale;
+    // there is deliberately no control for this yet, since changing it
+    // renames every firm on screen and means nothing to the economy.
+    identity::Locale locale = identity::Locale::Turkish;
 
     // Where the steering panel writes a scenario. A save is (seed + log), so
     // it is a few lines of text rather than a state dump.

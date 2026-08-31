@@ -11,6 +11,7 @@ enum class CellKind {
     Count,     // a whole number of things
     Flag,      // a boolean
     AgentRef,  // an agent index: navigable, not merely printable
+    Identity,  // a firm's logo and name, derived from the run seed and index
     Missing,   // no value exists (an unemployed household's employer)
 };
 
@@ -35,6 +36,14 @@ inline Cell flag_cell(bool b) {
 }
 inline Cell ref_cell(uint32_t r) {
     return Cell{CellKind::AgentRef, static_cast<double>(r), r, 0};
+}
+// The firm index is the whole payload: identity is a pure function of
+// (run seed, index), so a skin resolves the mark and the name itself rather
+// than carrying either through the view model. Sorting by that index is
+// therefore sorting by identity -- stable, and the order marks are generated
+// in. Alphabetical order over a name is a locale question, not a Cell one.
+inline Cell identity_cell(uint32_t firm) {
+    return Cell{CellKind::Identity, static_cast<double>(firm), firm, 0};
 }
 inline Cell missing_cell() {
     return Cell{CellKind::Missing, 0.0, 0u, 0};

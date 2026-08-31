@@ -41,6 +41,7 @@ add_library(viewer_core
     viewer/model_dist.cpp
     viewer/model_time.cpp
     viewer/model_steering.cpp
+    viewer/model_identity.cpp
     viewer/app.cpp
 )
 target_link_libraries(viewer_core PUBLIC atc_core)
@@ -66,6 +67,7 @@ add_executable(atc_tests
     tests/test_identity.cpp
     tests/test_identity_names.cpp
     tests/test_identity_svg.cpp
+    tests/test_viewer_identity.cpp
     tests/test_viewer_sim.cpp
     tests/test_viewer_ring.cpp
     tests/test_viewer_histogram.cpp
@@ -117,6 +119,7 @@ if(ATC_BUILD_VIEWER)
       viewer/panel_dist.cpp
       viewer/panel_time.cpp
       viewer/panel_steering.cpp
+      viewer/identity_textures.cpp
   )
   target_link_libraries(atc_viewer PRIVATE viewer_core imgui)
 endif()
