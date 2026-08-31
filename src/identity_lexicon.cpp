@@ -21,9 +21,9 @@ const char* const kTrMaterial[] = {
     "İplik","Dokuma","Tuğla","Maden","Kömür","Petrol","Kimya","Plastik",
     "Alüminyum","Mermer"};
 const char* const kTrNature[] = {
-    "Yıldız","Güneş","Deniz","Dağ","Kartal","Şahin","Aslan","Meşe","Çınar",
-    "Gül","Lale","Pınar","Irmak","Toprak","Rüzgar","Şafak","Umut","Ufuk","Doruk",
-    "Zirve","Bozkır","Yamaç","Kaynak","Bulut","Orman","Ova","Şelale","Kaya",
+    "Akyıldız","Günay","Deniz","Dağ","Kartal","Atmaca","Aslan","Meşe","Çınar",
+    "Gül","Lale","Pınar","Irmak","Verimli","Rüzgar","Şafak","Umut","Ufuk","Doruk",
+    "Zirve","Bozkır","Yamaç","Kaynak","Gökbulut","Orman","Ova","Şelale","Granit",
     "Fırtına","Alev","Kıvılcım","Nehir","Liman","Yaprak","Tohum","Filiz","Ada",
     "Kıyı","Turna","Ceylan"};
 const char* const kTrQual[] = {
@@ -31,7 +31,7 @@ const char* const kTrQual[] = {
     "Sarp","Yüce","Bir","Genç"};
 const char* const kTrPlace[] = {
     "Anadolu","Marmara","Ege","Akdeniz","Karadeniz","Toros","Boğaziçi","Trakya",
-    "Kapadokya","Çukurova","Konya","Bursa","Aydın","Menderes","Fırat","Dicle",
+    "Kapadokya","Çukurova","Konya","Bursa","Söke","Menderes","Fırat","Dicle",
     "Sakarya","Kızılırmak","Yeşilırmak","Uludağ","Erciyes","Ağrı","Van","Kayseri",
     "Denizli","Manisa","Balıkesir","Eskişehir","Adana","Mersin","Antalya",
     "Samsun","Trabzon","Rize","Edirne","Kütahya","Malatya","Sivas","Nemrut",
@@ -90,7 +90,7 @@ const char* const kJaMaterial[] = {
     "Suzu","Nendo"};
 const char* const kJaNature[] = {
     "Hoshi","Taiyo","Tsuki","Umi","Yama","Taka","Washi","Matsu","Sakura","Kaze",
-    "Kawa","Mori","Iwa","Yuki","Hikari","Sora","Nami","Take","Ume","Kumo",
+    "Kawa","Kigi","Iwa","Yuki","Hikari","Sora","Nami","Take","Ume","Kumo",
     "Shima","Minato","Tani","Hara","Izumi","Nagare","Kiri","Ame","Niji",
     "Kaminari","Honoo","Tsuchi","Kishi","Tsuru","Kame","Shika","Hayate","Asahi",
     "Kaede","Sugi"};

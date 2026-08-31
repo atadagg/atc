@@ -61,6 +61,21 @@ struct Mark {
 
 Mark mark(uint64_t seed);
 
+// Bar charges (pale, fess, cross) run the full height or width of the field,
+// so the same nominal size buys far more ink than a roundel does. Capped, or a
+// wide bar over a division leaves the emblem reading as two solid blocks.
+uint8_t effective_charge_size(const Mark& m);
+
+// Which layer is painted at (x, y) in the 0-100 box: 0 page, 1 field,
+// 2 division, 3 charge. This is the sampler behind ink_coverage, and it
+// mirrors the ordered fills that svg_mark emits -- change one and change both.
+uint8_t paint_at(const Mark& m, double x, double y);
+
+// Fraction of the emblem's own area carrying something other than its field:
+// the measure of whether a mark still reads at favicon size. Neither vanished
+// nor gone solid.
+double ink_coverage(const Mark& m, int grid);
+
 // ---- The name -------------------------------------------------------------
 
 enum class Strategy : uint8_t { Founder, Descriptive, Toponymic, Compound,

@@ -3,6 +3,7 @@
 #include "identity_lexicon.hpp"
 #include "identity_palette.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <string>
 
@@ -101,7 +102,9 @@ Mark mark(uint64_t seed) {
     // A plain field with no charge is a blank emblem.
     if (m.div == Div::Plain && m.charge == Charge::None) m.charge = Charge::Roundel;
 
-    m.charge_size = static_cast<uint8_t>(12 + s.index(5) * 12);
+    // Floor of 30, not 12. Measured on a 16x16 grid, a charge below ~24 units
+    // covers no sampled cell at all: the emblem reads as a blank field.
+    m.charge_size = static_cast<uint8_t>(30 + s.index(4) * 10);
     const auto np = static_cast<uint32_t>(palettes().size());
     m.palette  = static_cast<uint8_t>(s.index(np));
     m.palette2 = static_cast<uint8_t>(s.index(np));
@@ -109,6 +112,69 @@ Mark mark(uint64_t seed) {
     m.lock     = pick_of(s, kLocks);
     m.font     = static_cast<uint8_t>(s.index(kFontCount));
     return m;
+}
+
+uint8_t effective_charge_size(const Mark& m) {
+    const bool bar = m.charge == Charge::Pale || m.charge == Charge::Fess
+                  || m.charge == Charge::Cross;
+    return bar && m.charge_size > 32 ? uint8_t{32} : m.charge_size;
+}
+
+namespace {
+
+bool inside_silhouette(Sil sil, double x, double y) {
+    if (sil == Sil::Disc) {
+        const double dx = x - 50, dy = y - 50;
+        return dx * dx + dy * dy <= 48.0 * 48.0;
+    }
+    return x >= 2 && x <= 98 && y >= 2 && y <= 98;   // block ~ square at this scale
+}
+
+bool inside_division(Div d, double x, double y) {
+    switch (d) {
+    case Div::Plain:     return false;
+    case Div::Pale:      return x >= 50;
+    case Div::Fess:      return y >= 50;
+    case Div::Quarterly: return (x >= 50) != (y >= 50);
+    default:             return y < 30;   // Chief
+    }
+}
+
+bool inside_charge(Charge c, double s, double x, double y) {
+    const double dx = x - 50, dy = y - 50;
+    switch (c) {
+    case Charge::None:    return false;
+    case Charge::Roundel: return dx * dx + dy * dy <= (s / 2) * (s / 2);
+    case Charge::Annulet: return std::abs(std::sqrt(dx * dx + dy * dy) - s / 2)
+                              <= s / 8;
+    case Charge::Lozenge: return std::abs(dx) + std::abs(dy) <= s / 2;
+    case Charge::Pale:    return std::abs(dx) <= s / 2;
+    case Charge::Fess:    return std::abs(dy) <= s / 2;
+    default:              return std::abs(dx) <= s / 4 || std::abs(dy) <= s / 4;
+    }
+}
+
+}  // namespace
+
+uint8_t paint_at(const Mark& m, double x, double y) {
+    if (!inside_silhouette(m.sil, x, y)) return 0;
+    if (inside_charge(m.charge, effective_charge_size(m), x, y)) return 3;
+    if (inside_division(m.div, x, y)) return 2;
+    return 1;
+}
+
+double ink_coverage(const Mark& m, int grid) {
+    int inside = 0, figure = 0;
+    for (int i = 0; i < grid; ++i)
+        for (int j = 0; j < grid; ++j) {
+            const double x = (i + 0.5) * 100.0 / grid;
+            const double y = (j + 0.5) * 100.0 / grid;
+            const uint8_t layer = paint_at(m, x, y);
+            if (layer == 0) continue;
+            ++inside;
+            if (layer != 1) ++figure;
+        }
+    return inside == 0 ? 0.0 : static_cast<double>(figure) / inside;
 }
 
 Name name(uint64_t seed, Locale locale) {

@@ -6,6 +6,7 @@
 #include "world.hpp"
 
 #include <cstring>
+#include <map>
 #include <set>
 #include <vector>
 #include <type_traits>
@@ -71,7 +72,7 @@ TEST_CASE("every generated mark is well formed") {
     for (uint64_t s = 0; s < 200000; ++s) {
         const identity::Mark m = identity::mark(s);
         CHECK(m.palette < np);
-        CHECK(m.charge_size >= 12);
+        CHECK(m.charge_size >= 30);   // the measured legibility floor
         CHECK(m.charge_size <= 60);
         // never a blank emblem: a plain field with no charge is a wasted mark
         CHECK_FALSE((m.div == identity::Div::Plain
@@ -114,4 +115,27 @@ TEST_CASE("generating identities cannot perturb the simulation") {
     // If identity ever drew from Rng, how many logos the viewer happened to
     // draw would change the economy. This is invariant 2 (spec Part 1).
     CHECK(run_months(40, false) == run_months(40, true));
+}
+
+TEST_CASE("no mark or name is over-represented") {
+    // Two-sided on purpose: "a million distinct marks" is satisfied by a
+    // generator that also emits one mark 40% of the time.
+    std::map<std::string, int> heads;
+    constexpr int kN = 100000;
+    for (uint64_t s = 0; s < kN; ++s)
+        ++heads[identity::name(s, identity::Locale::Turkish).head];
+    CHECK(heads.size() > 4000);
+    for (const auto& [h, c] : heads)
+        CHECK_MESSAGE(c < kN / 200, "name '", h, "' appears ", c, " times");
+}
+
+TEST_CASE("every mark stays legible at favicon size") {
+    // Rasterise the mark's silhouette and charge into a 16x16 grid and check
+    // it has neither gone solid nor vanished. Free-form geometry measured
+    // 29.9% illegible at this size, which is why the grammar is constrained.
+    for (uint64_t s = 0; s < 20000; ++s) {
+        const double cov = identity::ink_coverage(identity::mark(s), 16);
+        CHECK(cov >= 0.045);
+        CHECK(cov <= 0.80);
+    }
 }

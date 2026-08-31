@@ -30,7 +30,10 @@ std::string hex(Rgb c) {
     return buf;
 }
 
-// Silhouette outlines in the 0-100 box. Ordered fills only -- no boolean
+// Silhouette outlines in the 0-100 box. These mirror inside_silhouette() and
+// the charge predicates in identity.cpp, which is what ink_coverage samples --
+// change the shapes here and change the sampler there.
+// Ordered fills only -- no boolean
 // geometry, so the SVG and the sampler in identity.cpp can agree exactly.
 const char* silhouette_path(Sil s) {
     switch (s) {
@@ -101,7 +104,7 @@ std::string svg_mark(const Mark& m, double x, double y, double size, uint32_t ui
        + ")\" clip-path=\"url(#" + id + ")\">";
     s += rect(0, 0, 100, 100, p.field);
     s += division(m.div, q.field);
-    s += charge_shape(m.charge, m.charge_size, p.ink);
+    s += charge_shape(m.charge, effective_charge_size(m), p.ink);
     s += "</g>";
     return s;
 }

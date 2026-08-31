@@ -96,3 +96,19 @@ TEST_CASE("acronym initials are whole letters, not half a UTF-8 sequence") {
             }
         }
 }
+
+TEST_CASE("no word appears in two head slots") {
+    // Founder, Toponymic and Evocative each put one word in the head. A word
+    // listed in two of those slots is drawn by two strategies and lands at
+    // twice the rate of its neighbours -- which is how Şahin and Yıldız broke
+    // the two-sided coverage bound.
+    for (uint8_t i = 0; i < static_cast<uint8_t>(identity::Locale::Count); ++i) {
+        const auto loc = static_cast<identity::Locale>(i);
+        const auto& L = identity::lexicon(loc);
+        INFO("locale ", identity::locale_name(loc));
+        std::set<std::string> seen;
+        for (auto slot : {L.surname, L.nature, L.place})
+            for (const char* w : slot)
+                CHECK_MESSAGE(seen.insert(w).second, "'", w, "' is in two head slots");
+    }
+}
