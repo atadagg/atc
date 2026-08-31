@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <span>
 
+#include "identity_glyphs.hpp"
+
 namespace identity {
 
 // splitmix64 finalizer. Stateless, so identity has random access: firm
@@ -31,5 +33,31 @@ private:
     uint64_t seed_;
     uint64_t i_;
 };
+
+
+// ---- The mark -------------------------------------------------------------
+
+enum class Sil    : uint8_t { Disc, Block, Square };
+enum class Div    : uint8_t { Plain, Pale, Fess, Quarterly, Chief };
+enum class Charge : uint8_t { None, Roundel, Annulet, Lozenge, Pale, Fess, Cross };
+enum class Kind   : uint8_t { Abstract, Lettermark, Wordmark, Combination };
+enum class Lock   : uint8_t { Horizontal, Stacked, MarkRight, Lettermark,
+                              Wordmark, StackedWords, Enclosed };
+
+// Geometry lives in a fixed 0-255 unit box so the SVG and ImGui backends
+// agree exactly rather than approximately.
+struct Mark {
+    Sil     sil;
+    Div     div;
+    Charge  charge;
+    uint8_t charge_size;
+    uint8_t palette;
+    uint8_t palette2;   // the divided half
+    Kind    kind;
+    Lock    lock;
+    uint8_t font;
+};
+
+Mark mark(uint64_t seed);
 
 }  // namespace identity

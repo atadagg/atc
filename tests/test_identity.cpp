@@ -2,7 +2,9 @@
 #include "identity.hpp"
 #include "identity_palette.hpp"
 
+#include <cstring>
 #include <set>
+#include <type_traits>
 
 TEST_CASE("identity hash is stateless and order-independent") {
     // Same seed, same answer, no matter how many other seeds were hashed first.
@@ -43,4 +45,35 @@ TEST_CASE("palette fields are perceptually spaced from each other") {
             const double d = identity::distance(ps[i].field, ps[j].field);
             CHECK_MESSAGE(d >= 40.0, "palettes ", i, " and ", j, " too close");
         }
+}
+
+TEST_CASE("Mark is trivially copyable") {
+    // Invariants 3 and 4: this is what keeps SimSnapshot a plain assignment.
+    static_assert(std::is_trivially_copyable_v<identity::Mark>);
+    CHECK(sizeof(identity::Mark) <= 16);
+}
+
+TEST_CASE("mark is a pure function of its seed") {
+    for (uint64_t s : {1ull, 7ull, 999999ull}) {
+        const identity::Mark a = identity::mark(s);
+        for (uint64_t k = 0; k < 100; ++k) (void)identity::mark(k);
+        const identity::Mark b = identity::mark(s);
+        CHECK(std::memcmp(&a, &b, sizeof(a)) == 0);
+    }
+}
+
+TEST_CASE("every generated mark is well formed") {
+    const auto np = identity::palettes().size();
+    for (uint64_t s = 0; s < 200000; ++s) {
+        const identity::Mark m = identity::mark(s);
+        CHECK(m.palette < np);
+        CHECK(m.charge_size >= 12);
+        CHECK(m.charge_size <= 60);
+        // never a blank emblem: a plain field with no charge is a wasted mark
+        CHECK_FALSE((m.div == identity::Div::Plain
+                     && m.charge == identity::Charge::None));
+        // cross and saltire on a non-disc silhouette read as a flag
+        if (m.sil != identity::Sil::Disc)
+            CHECK(m.charge != identity::Charge::Cross);
+    }
 }
