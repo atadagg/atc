@@ -957,6 +957,37 @@ Layout **measures rather than guesses**: every line is rendered at a size
 scaled to the space it was given, which is what the masthead's magic-offset bug
 came from not doing.
 
+**Done: identity in the viewer.** Firms are marks and names in the UI, not
+just indices. The seam is the same view-model layer everything else uses:
+
+- `CellKind::Identity` carries only the firm index — identity is a pure
+  function of `(seed, index)`, so a skin resolves the mark and name itself and
+  the index *is* the sort key. `firm_columns()` gains an `identity` column at
+  index 1 (after the id selector, so `draw_cell`'s `col == 0` case is
+  untouched); `firm_detail` gains an `identity` field.
+- `viewer/model_identity.{hpp,cpp}` lives in `viewer_core` (no ImGui, no SDL,
+  no `Rng`): `firm_identity`, `display_name`, and `rasterize`, which paints a
+  mark to RGBA8 through the **existing `identity::paint_at` sampler** rather
+  than a third copy of the shapes — the same sampler `ink_coverage` trusts, so
+  it cannot drift from `identity.cpp`/`identity_svg.cpp`. Transparent outside
+  the silhouette.
+- `viewer/identity_textures.{hpp,cpp}` (linked into `atc_viewer` only) is a
+  fill-once SDL texture cache keyed by `(firm, size)`, cleared when the run
+  seed changes. Nearest-neighbour scaling — smoothing an 18px emblem is what
+  makes a generated logo look like a smudge.
+- Locale is `App::locale` (Turkish, the only verified lexicon), a parameter of
+  the name function and never a field, per the identity rule. No live selector.
+- `tests/test_viewer_identity.cpp` covers the window-free half: identity
+  matches the module directly, is stable and distinct across firms and seeds,
+  `rasterize` is correctly sized with a transparent exterior and ink tracking
+  `ink_coverage`, and the column/detail wiring. The ImGui panels stay untested,
+  as they always have.
+
+The stock ImGui font is ASCII only, so the viewer loads the vendored
+`DINish-Medium.ttf` (SIL OFL, covers Latin Extended-A) as its UI font — a
+`viewer/main.cpp` concern, with a stderr warning and a fallback to the built-in
+font. Without it, `ş`/`ğ`/`İ` in firm names print as `?`.
+
 ## Documents
 
 - `docs/superpowers/specs/2026-08-27-agent-based-economy-design.md` — the
@@ -1008,8 +1039,11 @@ Real but judged not worth fixing yet. Reconsider when touching that code.
   compile. `constexpr` shared label constants would make it a build error.
 - The scrub bar's call site (`scrub_bounds(app.max_month)`) is not itself
   unit-tested — panels need a window. The rule it encodes is tested.
-- Viewer integration for identity is not built: `Cell` cannot carry a mark, and
-  `panel_agents` has no identity column. Needs a window, so different tests.
+- The ImGui font glyph coverage is a viewer-executable concern: the UI loads
+  `DINish-Medium.ttf` (already vendored) so Turkish names render, but that
+  choice lives in `viewer/main.cpp`, untested — a font with a narrower range
+  would silently reprint `ş`/`ğ` as `?`. The `display_name` string is correct
+  UTF-8 regardless.
 - `identity_svg`'s silhouette and charge shapes mirror the predicates in
   `identity.cpp` that `ink_coverage` samples, in two translation units. They
   share `effective_charge_size` but not the shapes, so an edit to one can drift

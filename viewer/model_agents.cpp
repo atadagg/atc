@@ -11,6 +11,9 @@ namespace {
 
 constexpr ColumnSpec kFirmColumns[] = {
     {"firm",      CellKind::AgentRef, 0, true},
+    // Second, not first: draw_cell treats column 0 as the row selector, so
+    // the id column stays where it is.
+    {"identity",  CellKind::Identity, 0, true},
     {"wage",      CellKind::Number,   2, true},
     {"price",     CellKind::Number,   3, true},
     {"inventory", CellKind::Number,   1, true},
@@ -52,12 +55,13 @@ Cell firm_cell(const World& w, uint32_t firm, int col) {
     const Firm& f = w.firms[firm];
     switch (col) {
         case 0: return ref_cell(firm);
-        case 1: return number_cell(f.wage, 2);
-        case 2: return number_cell(f.price, 3);
-        case 3: return number_cell(f.inventory, 1);
-        case 4: return count_cell(f.employees.size());
-        case 5: return number_cell(f.liquidity, 1);
-        case 6: return flag_cell(f.has_open_vacancy);
+        case 1: return identity_cell(firm);
+        case 2: return number_cell(f.wage, 2);
+        case 3: return number_cell(f.price, 3);
+        case 4: return number_cell(f.inventory, 1);
+        case 5: return count_cell(f.employees.size());
+        case 6: return number_cell(f.liquidity, 1);
+        case 7: return flag_cell(f.has_open_vacancy);
         default: return number_cell(f.demand_last_month, 1);
     }
 }
@@ -127,6 +131,7 @@ DetailModel firm_detail(const World& w, uint32_t firm) {
     d.kind = AgentKind::Firm;
     d.id = firm;
     d.fields = {
+        {"identity", identity_cell(firm)},
         {"wage", number_cell(f.wage, 4)},
         {"price", number_cell(f.price, 4)},
         {"inventory", number_cell(f.inventory, 3)},

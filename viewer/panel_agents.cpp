@@ -3,10 +3,33 @@
 #include <vector>
 
 #include "app.hpp"
+#include "identity_textures.hpp"
 #include "imgui.h"
 #include "model_agents.hpp"
+#include "model_identity.hpp"
 
 namespace {
+
+// Mark sizes. The row emblem is deliberately small: at 18px it is roughly
+// favicon scale, which is the size the grammar's coverage floor exists to
+// survive.
+constexpr int kRowMarkPx = 18;
+constexpr int kDetailMarkPx = 64;
+
+// Draws the emblem for `firm` inline, followed by its one-line name.
+void draw_identity(App& app, uint32_t firm, int px) {
+    const FirmIdentity id = firm_identity(app.sim.seed(), firm, app.locale);
+    const ImTextureID tex =
+        identity_textures::mark_texture(app.sim.seed(), firm, id.mark, px);
+    const float f = static_cast<float>(px);
+    if (tex != ImTextureID_Invalid) {
+        ImGui::Image(ImTextureRef(tex), ImVec2(f, f));
+        ImGui::SameLine();
+    }
+    // Centre the line against the emblem rather than the text row.
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(display_name(id.name).c_str());
+}
 
 // The whole skin, in one function: a Cell in, pixels out.
 void draw_cell(App& app, const Cell& c, AgentKind kind, uint32_t row_id, int col) {
@@ -39,6 +62,9 @@ void draw_cell(App& app, const Cell& c, AgentKind kind, uint32_t row_id, int col
                 ImGui::Text("%u", c.ref);
             }
             break;
+        case CellKind::Identity:
+            draw_identity(app, c.ref, kRowMarkPx);
+            break;
         case CellKind::Number:
             std::snprintf(buf, sizeof(buf), "%.*f", c.precision, c.number);
             ImGui::TextUnformatted(buf);
@@ -70,8 +96,16 @@ void draw_firm_table(App& app) {
 
     ImGui::TableSetupScrollFreeze(0, 1);
     for (const ColumnSpec& c : cols) {
-        ImGui::TableSetupColumn(c.header, c.sortable ? ImGuiTableColumnFlags_None
-                                                     : ImGuiTableColumnFlags_NoSort);
+        ImGuiTableColumnFlags flags =
+            c.sortable ? ImGuiTableColumnFlags_None : ImGuiTableColumnFlags_NoSort;
+        // The identity column holds an emblem and a company name, so it needs
+        // real width; the numeric columns are content-sized as before.
+        if (c.kind == CellKind::Identity) {
+            flags |= ImGuiTableColumnFlags_WidthFixed;
+            ImGui::TableSetupColumn(c.header, flags, 200.0f);
+        } else {
+            ImGui::TableSetupColumn(c.header, flags);
+        }
     }
     ImGui::TableHeadersRow();
 
@@ -159,7 +193,25 @@ void draw_firm_detail(App& app, const DetailModel& d) {
     if (!d.present) return;
 
     ImGui::SeparatorText("selected firm");
-    ImGui::Text("firm %u", d.id);
+
+    const FirmIdentity id = firm_identity(app.sim.seed(), d.id, app.locale);
+    const ImTextureID tex =
+        identity_textures::mark_texture(app.sim.seed(), d.id, id.mark, kDetailMarkPx);
+    if (tex != ImTextureID_Invalid) {
+        ImGui::Image(ImTextureRef(tex),
+                     ImVec2(kDetailMarkPx, kDetailMarkPx));
+        ImGui::SameLine();
+    }
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted(display_name(id.name).c_str());
+    ImGui::TextDisabled("firm %u", d.id);
+    // The lexicon says whether its words have been read by a speaker; an
+    // unverified locale must say so rather than pass its guesses off as names.
+    const identity::Lexicon& lex = identity::lexicon(id.name.locale);
+    ImGui::TextDisabled("%s / %s%s", strategy_name(id.name.strategy),
+                        identity::locale_name(id.name.locale),
+                        lex.verified ? "" : " UNVERIFIED");
+    ImGui::EndGroup();
 
     const Cell& wage = find_field(d, "wage");
     const Cell& price = find_field(d, "price");

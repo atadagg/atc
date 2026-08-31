@@ -1,3 +1,4 @@
+#include <cstring>
 #include <vector>
 
 #include "agents.hpp"
@@ -40,12 +41,23 @@ World tiny_world() {
     return w;
 }
 
+// Column identity is the index into the schema, so a test that hardcodes an
+// index breaks the moment a column is inserted -- and reads a *different*
+// column while still compiling. Look the index up by header instead.
+int firm_col(const char* header) {
+    const auto cols = firm_columns();
+    for (int i = 0; i < static_cast<int>(cols.size()); ++i) {
+        if (std::strcmp(cols[static_cast<size_t>(i)].header, header) == 0) return i;
+    }
+    return -1;
+}
+
 }  // namespace
 
 TEST_CASE("the schema and the cell accessor agree on column count") {
     const World w = tiny_world();
     const auto cols = firm_columns();
-    REQUIRE(cols.size() == 8);
+    REQUIRE(cols.size() == 9);
     for (int c = 0; c < static_cast<int>(cols.size()); ++c) {
         const Cell cell = firm_cell(w, 0u, c);
         CHECK(cell.kind == cols[static_cast<size_t>(c)].kind);
@@ -107,7 +119,7 @@ TEST_CASE("pinned firms restrict the table to that set") {
 
 TEST_CASE("sorting works in both directions on a numeric column") {
     const World w = tiny_world();
-    const int wage_col = 1;
+    const int wage_col = firm_col("wage");
 
     const std::vector<uint32_t> asc = firm_rows(w, Filters{}, SortSpec{wage_col, true});
     REQUIRE(asc.size() == 3);
@@ -121,21 +133,21 @@ TEST_CASE("sorting works in both directions on a numeric column") {
 
 TEST_CASE("sorting a flag column orders false before true") {
     const World w = tiny_world();
-    const int vacancy_col = 6;
+    const int vacancy_col = firm_col("vacancy");
     const std::vector<uint32_t> rows = firm_rows(w, Filters{}, SortSpec{vacancy_col, true});
     CHECK(rows[0] == 0u);  // the only firm with no vacancy
 }
 
 TEST_CASE("staff is a count of employees") {
     const World w = tiny_world();
-    const Cell staff = firm_cell(w, 2u, 4);
+    const Cell staff = firm_cell(w, 2u, firm_col("staff"));
     CHECK(staff.kind == CellKind::Count);
     CHECK(staff.number == 2.0);
 }
 
 TEST_CASE("the firm id column is a navigable reference") {
     const World w = tiny_world();
-    const Cell id = firm_cell(w, 2u, 0);
+    const Cell id = firm_cell(w, 2u, firm_col("firm"));
     CHECK(id.kind == CellKind::AgentRef);
     CHECK(id.ref == 2u);
 }

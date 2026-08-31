@@ -5,6 +5,7 @@
 #include "app.hpp"
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_sdlrenderer3.h"
+#include "identity_textures.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -129,8 +130,24 @@ int main(int, char**) {
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
+
+    // The stock ImGui font is ASCII only, so firm names render their Turkish
+    // letters (ş, ğ, ı, ...) as '?'. DINish is one of the faces already
+    // vendored for the identity outlines and covers Latin Extended-A, so the
+    // names read the same on screen as in the SVG. Falls back to the built-in
+    // font if the file is not found (the viewer assumes the repo root as cwd,
+    // as it does for output/ and scenarios/).
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.Fonts->AddFontFromFileTTF("third_party/fonts/DINish-Medium.ttf", 16.0f) ==
+        nullptr) {
+        std::fprintf(stderr, "identity font not found; names with Turkish "
+                             "letters will show '?'\n");
+        io.Fonts->AddFontDefault();
+    }
+
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
+    identity_textures::init(renderer);
 
     App app(1);
 
@@ -174,6 +191,7 @@ int main(int, char**) {
         SDL_RenderPresent(renderer);
     }
 
+    identity_textures::shutdown();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
