@@ -1,4 +1,4 @@
-# economy_viewer — a live inspection and steering front-end
+# atc_viewer — a live inspection and steering front-end
 
 Status: design approved, not yet implemented.
 Supersedes nothing. `scripts/report.py` and `scripts/validate.py` keep their
@@ -53,7 +53,7 @@ Out of scope for this document:
 
 ## 3. Architecture
 
-A second executable, `economy_viewer`, linking the existing `economy_core`
+A second executable, `atc_viewer`, linking the existing `atc_core`
 unchanged. The CLI (`economy`), the tests, and both Python scripts are
 untouched by this work.
 
@@ -104,8 +104,8 @@ third_party/imgui/  vendored, beside doctest.h
 third_party/implot/ vendored (see §6 risk)
 ```
 
-`economy_core` gains nothing. `CMakeLists.txt` gains an `economy_viewer`
-target, guarded by an `ECONOMY_BUILD_VIEWER` option defaulting to ON when
+`atc_core` gains nothing. `CMakeLists.txt` gains an `atc_viewer`
+target, guarded by an `ATC_BUILD_VIEWER` option defaulting to ON when
 SDL3 is found, so a machine without SDL3 still builds and tests the core.
 
 ## 4. Components

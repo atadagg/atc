@@ -187,7 +187,7 @@ def main():
     missing = [c for c in DEMAND_COLS if c not in df.columns]
     if missing:
         print(f"skipping cycle/crosscorr/demand figures: {path} lacks {', '.join(missing)}.\n"
-              f"  regenerate with a current build: ./build/economy --out {path}")
+              f"  regenerate with a current build: ./build/atc --out {path}")
     else:
         fig_cycle(df, out)
         fig_crosscorr(df, out)

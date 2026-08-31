@@ -8,7 +8,7 @@ judged against the noise it has to beat.
 
 Usage:
     python3 scripts/ensemble.py [--seeds 20] [--months 6000] [--burn-in 1000]
-                               [--jobs 8] [--binary ./build/economy]
+                               [--jobs 8] [--binary ./build/atc]
                                [--dir <scratch dir for the per-seed CSVs>]
 """
 
@@ -62,7 +62,7 @@ def main():
     ap.add_argument("--months", type=int, default=6000)
     ap.add_argument("--burn-in", type=int, default=1000)
     ap.add_argument("--jobs", type=int, default=8)
-    ap.add_argument("--binary", default="./build/economy")
+    ap.add_argument("--binary", default="./build/atc")
     ap.add_argument("--dir", default=None,
                     help="where to write the per-seed CSVs (default: a temp dir)")
     args = ap.parse_args()

@@ -17,9 +17,9 @@
 - No changes to `src/`. Invariants 2 (determinism) and 5 (core I/O only through `Recorder`) are untouched; the model layer only reads `World`.
 - This is a refactor. Same columns, same numbers, same behaviour on screen. A visible difference is a bug.
 - Cells never carry pre-formatted strings. Formatting is the skin's job.
-- New model files go in the `viewer_core` library target; `panel_*.cpp` stay in `economy_viewer`.
-- Every new test file must be added to the `economy_tests` source list in `CMakeLists.txt`.
-- Full suite must pass before every commit: `cmake --build build -j && ./build/economy_tests`.
+- New model files go in the `viewer_core` library target; `panel_*.cpp` stay in `atc_viewer`.
+- Every new test file must be added to the `atc_tests` source list in `CMakeLists.txt`.
+- Full suite must pass before every commit: `cmake --build build -j && ./build/atc_tests`.
 
 ---
 
@@ -29,7 +29,7 @@
 - Create: `viewer/cell.hpp`
 - Create: `viewer/cell.cpp`
 - Create: `tests/test_viewer_cell.cpp`
-- Modify: `CMakeLists.txt` (add `viewer/cell.cpp` to `viewer_core`, add the test file to `economy_tests`)
+- Modify: `CMakeLists.txt` (add `viewer/cell.cpp` to `viewer_core`, add the test file to `atc_tests`)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -166,11 +166,11 @@ bool cell_less(const Cell& a, const Cell& b) {
 }
 ```
 
-In `CMakeLists.txt`, add `viewer/cell.cpp` to the `add_library(viewer_core ...)` source list, and `tests/test_viewer_cell.cpp` to the `economy_tests` source list.
+In `CMakeLists.txt`, add `viewer/cell.cpp` to the `add_library(viewer_core ...)` source list, and `tests/test_viewer_cell.cpp` to the `atc_tests` source list.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS, with the case count up by 4.
 
 - [ ] **Step 5: Commit**
@@ -188,7 +188,7 @@ git commit -m "feat(viewer): add the cell vocabulary for the view model"
 - Create: `viewer/model_agents.hpp`
 - Create: `viewer/model_agents.cpp`
 - Create: `tests/test_viewer_model_agents.cpp`
-- Modify: `CMakeLists.txt` (add `viewer/model_agents.cpp` to `viewer_core`, add the test file to `economy_tests`)
+- Modify: `CMakeLists.txt` (add `viewer/model_agents.cpp` to `viewer_core`, add the test file to `atc_tests`)
 
 **Interfaces:**
 - Consumes: everything from `viewer/cell.hpp` (Task 1).
@@ -453,11 +453,11 @@ std::vector<uint32_t> firm_rows(const World& w, const Filters& f, SortSpec sort)
 }
 ```
 
-In `CMakeLists.txt`, add `viewer/model_agents.cpp` to `viewer_core` and `tests/test_viewer_model_agents.cpp` to `economy_tests`.
+In `CMakeLists.txt`, add `viewer/model_agents.cpp` to `viewer_core` and `tests/test_viewer_model_agents.cpp` to `atc_tests`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -629,7 +629,7 @@ std::vector<uint32_t> household_rows(const World& w, const Filters& f, SortSpec 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -839,7 +839,7 @@ Add `#include <utility>` to `viewer/model_agents.cpp` for `std::move`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -859,7 +859,7 @@ git commit -m "feat(viewer): add the agent detail view model"
 - Create: `viewer/model_time.hpp`
 - Create: `viewer/model_time.cpp`
 - Create: `tests/test_viewer_model_views.cpp`
-- Modify: `CMakeLists.txt` (add both `.cpp` files to `viewer_core`, add the test file to `economy_tests`)
+- Modify: `CMakeLists.txt` (add both `.cpp` files to `viewer_core`, add the test file to `atc_tests`)
 
 **Interfaces:**
 - Consumes: `viewer/cell.hpp` (Task 1) for `AgentKind`; `viewer/ring_recorder.hpp` and `src/recorder.hpp` for `Metrics`.
@@ -1099,11 +1099,11 @@ std::vector<double> series_values(const RingRecorder& r, const SeriesSpec& s) {
 }
 ```
 
-In `CMakeLists.txt`, add `viewer/model_dist.cpp` and `viewer/model_time.cpp` to `viewer_core`, and `tests/test_viewer_model_views.cpp` to `economy_tests`.
+In `CMakeLists.txt`, add `viewer/model_dist.cpp` and `viewer/model_time.cpp` to `viewer_core`, and `tests/test_viewer_model_views.cpp` to `atc_tests`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1402,10 +1402,10 @@ grep -rn "imgui\|SDL" viewer/cell.hpp viewer/cell.cpp viewer/model_*.hpp viewer/
 
 Expected: no output. If anything matches, the seam has leaked and the task is not done.
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: a warning-clean build and every test passing.
 
-Then run the viewer and confirm by eye, against the description in `CLAUDE.md`: `./build/economy_viewer`
+Then run the viewer and confirm by eye, against the description in `CLAUDE.md`: `./build/atc_viewer`
 
 - the firms tab shows all eight columns, sorts on a header click both ways, and the three checkboxes filter
 - clicking a firm-wage bin pins the firm table; "clear" unpins
@@ -1429,7 +1429,7 @@ and reimplements only the drawing. See
 `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md`.
 ```
 
-Update the test and assertion counts in the Status section to whatever `./build/economy_tests` now reports.
+Update the test and assertion counts in the Status section to whatever `./build/atc_tests` now reports.
 
 - [ ] **Step 7: Commit**
 

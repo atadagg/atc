@@ -1,4 +1,6 @@
-# economy — agent-based macroeconomic simulation
+# ATC — AT Capital Engine
+
+*Autonomous Trade · Capital · Engine — a capital engine.*
 
 C++23 implementation of Lengnick's baseline ABM (JEBO 2013, "Agent-based
 macroeconomics: A baseline model"). 1000 households, 100 firms, no central
@@ -11,11 +13,11 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 217 cases
-./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
+./build/atc_tests                              # 217 cases
+./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 
-./build/economy --scenario scenarios/stimulus.scenario --out output/s.csv
+./build/atc --scenario scenarios/stimulus.scenario --out output/s.csv
 ```
 
 A **scenario** is a save file and a reproducible experiment: `(seed +
@@ -67,8 +69,8 @@ anything to the recorder.
 ### Viewer
 
 ```bash
-cmake -S . -B build && cmake --build build -j   # builds economy_viewer if SDL3 is present
-./build/economy_viewer
+cmake -S . -B build && cmake --build build -j   # builds atc_viewer if SDL3 is present
+./build/atc_viewer
 ```
 
 A live SDL3 + ImGui front-end (ImGui vendored at `third_party/imgui/`,
@@ -305,7 +307,7 @@ Journaling off leaves the run **byte-identical** — verified over the full
 6000-month reference run.
 
 ```bash
-./build/economy --seed 1 --burn-in 50 --months 2 \
+./build/atc --seed 1 --burn-in 50 --months 2 \
     --out output/run.csv --journal output/journal.csv --journal-months 1
 ```
 
@@ -426,7 +428,7 @@ The format is one record per line, `#` comments allowed, and it stays readable
 a year later because parameters are addressed by **name**:
 
 ```
-economy-scenario 1
+atc-scenario 1
 seed 1
 3000 issue_all 0 50
 ```
@@ -465,7 +467,7 @@ marginally negative... did not occur once in 7000 months. Left unclamped
 deliberately."* **It occurs.** Seeds 5 and 7 abort mid-run:
 
 ```
-./build/economy --seed 5 --burn-in 337 --months 1 --out /dev/null
+./build/atc --seed 5 --burn-in 337 --months 1 --out /dev/null
 terminate called after throwing an instance of 'std::invalid_argument'
   what():  ledger::transfer: amount must be finite and non-negative
 ```

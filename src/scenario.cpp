@@ -57,7 +57,7 @@ const char* action_name(intervention::Action a) {
 }  // namespace
 
 void write(const Scenario& s, std::ostream& out) {
-    out << "economy-scenario " << kFormatVersion << '\n';
+    out << "atc-scenario " << kFormatVersion << '\n';
     out << "seed " << s.seed << '\n';
 
     auto specs = intervention::param_specs();
@@ -92,8 +92,8 @@ Scenario read(std::istream& in) {
         if (f.empty()) continue;
 
         if (!saw_header) {
-            if (f.size() != 2 || f[0] != "economy-scenario") {
-                fail("expected 'economy-scenario <version>' as the first record", number);
+            if (f.size() != 2 || f[0] != "atc-scenario") {
+                fail("expected 'atc-scenario <version>' as the first record", number);
             }
             if (parse_int(f[1], number) != kFormatVersion) {
                 fail("unsupported format version '" + f[1] + "'", number);

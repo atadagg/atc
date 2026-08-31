@@ -64,7 +64,7 @@ These are the exact published values. Use them verbatim; do not tune until the s
 
 | File | Responsibility |
 |---|---|
-| `CMakeLists.txt` | Build configuration; `economy_core` library, `economy` binary, `economy_tests` binary |
+| `CMakeLists.txt` | Build configuration; `atc_core` library, `economy` binary, `atc_tests` binary |
 | `third_party/doctest.h` | Vendored single-header test framework |
 | `src/params.hpp` | All calibration constants and run configuration. No logic. |
 | `src/rng.hpp` / `src/rng.cpp` | Deterministic seeded RNG wrapper |
@@ -108,7 +108,7 @@ Verify it downloaded: `head -5 third_party/doctest.h` should show the doctest ba
 
 ```cmake
 cmake_minimum_required(VERSION 3.28)
-project(economy CXX)
+project(atc CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -117,19 +117,19 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-add_library(economy_core
+add_library(atc_core
     src/rng.cpp
 )
-target_include_directories(economy_core PUBLIC src)
+target_include_directories(atc_core PUBLIC src)
 
 enable_testing()
-add_executable(economy_tests
+add_executable(atc_tests
     tests/test_main.cpp
     tests/test_rng.cpp
 )
-target_link_libraries(economy_tests PRIVATE economy_core)
-target_include_directories(economy_tests PRIVATE third_party)
-add_test(NAME economy_tests COMMAND economy_tests)
+target_link_libraries(atc_tests PRIVATE atc_core)
+target_include_directories(atc_tests PRIVATE third_party)
+add_test(NAME atc_tests COMMAND atc_tests)
 ```
 
 - [ ] **Step 3: Write the test main**
@@ -289,7 +289,7 @@ Add `#include <algorithm>` to `tests/test_rng.cpp` for `std::sort`.
 - [ ] **Step 7: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all test cases pass.
@@ -573,12 +573,12 @@ double World::total_money() const {
 
 - [ ] **Step 6: Register the new files in CMakeLists.txt**
 
-Add `src/world.cpp` to the `economy_core` source list and `tests/test_world.cpp` to the `economy_tests` source list.
+Add `src/world.cpp` to the `atc_core` source list and `tests/test_world.cpp` to the `atc_tests` source list.
 
 - [ ] **Step 7: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -795,12 +795,12 @@ uint32_t random_unconnected_firm_by_size(const World& w, uint32_t household, Rng
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/network.cpp` to `economy_core` and `tests/test_network.cpp` to `economy_tests`.
+Add `src/network.cpp` to `atc_core` and `tests/test_network.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -1101,12 +1101,12 @@ void run_monthly(World& w, Rng& rng) {
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/firm_decisions.cpp` to `economy_core` and `tests/test_firm_decisions.cpp` to `economy_tests`.
+Add `src/firm_decisions.cpp` to `atc_core` and `tests/test_firm_decisions.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -1439,12 +1439,12 @@ void run_monthly(World& w, Rng& rng) {
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/household_decisions.cpp` to `economy_core` and `tests/test_household_decisions.cpp` to `economy_tests`.
+Add `src/household_decisions.cpp` to `atc_core` and `tests/test_household_decisions.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -1719,12 +1719,12 @@ void run_day(World& w, Rng& rng) {
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/daily.cpp` to `economy_core` and `tests/test_daily.cpp` to `economy_tests`.
+Add `src/daily.cpp` to `atc_core` and `tests/test_daily.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass. If the "cannot spend more than it has" test leaves a small negative liquidity, clamp `bought` so that `cost <= h.liquidity` exactly rather than relying on the division.
@@ -2044,12 +2044,12 @@ Note on `apply_pending_fires`: the loop is deliberately indexed rather than rang
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/month_close.cpp` to `economy_core` and `tests/test_month_close.cpp` to `economy_tests`.
+Add `src/month_close.cpp` to `atc_core` and `tests/test_month_close.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -2266,12 +2266,12 @@ void Scheduler::run_month() {
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/scheduler.cpp` to `economy_core` and `tests/test_scheduler.cpp` to `economy_tests`.
+Add `src/scheduler.cpp` to `atc_core` and `tests/test_scheduler.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass. The money-conservation test is the important one — if it fails, the bug is in `daily::shop`, `month_close::pay_wages`, or `month_close::distribute_profits`, in that order of likelihood.
@@ -2511,12 +2511,12 @@ void CsvRecorder::record(const Metrics& m) {
 
 - [ ] **Step 4: Register in CMakeLists.txt**
 
-Add `src/recorder.cpp` to `economy_core` and `tests/test_recorder.cpp` to `economy_tests`.
+Add `src/recorder.cpp` to `atc_core` and `tests/test_recorder.cpp` to `atc_tests`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: all pass.
@@ -2539,7 +2539,7 @@ git commit -m "feat: aggregate metrics and CSV recorder"
 
 **Interfaces:**
 - Consumes: everything
-- Produces: the `economy` binary, `./build/economy --seed N --months M --burn-in B --out PATH`
+- Produces: the `economy` binary, `./build/atc --seed N --months M --burn-in B --out PATH`
 
 - [ ] **Step 1: Write the failing burn-in independence test**
 
@@ -2579,7 +2579,7 @@ Add `#include <cmath>` to the file.
 - [ ] **Step 2: Run to verify it compiles and observe the result**
 
 ```bash
-cmake --build build -j && ./build/economy_tests
+cmake --build build -j && ./build/atc_tests
 ```
 
 Expected: compiles. If this test fails, that is a genuine finding about the model, not a build error — record the two values before changing anything.
@@ -2655,7 +2655,7 @@ int main(int argc, char** argv) {
 
 ```cmake
 add_executable(economy src/main.cpp)
-target_link_libraries(economy PRIVATE economy_core)
+target_link_libraries(economy PRIVATE atc_core)
 ```
 
 - [ ] **Step 5: Build and run the full simulation**
@@ -2663,7 +2663,7 @@ target_link_libraries(economy PRIVATE economy_core)
 ```bash
 cmake --build build -j
 mkdir -p output
-./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
+./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 ```
 
 Expected: completes, and the reported `drift` is smaller than `1e-6`. A non-trivial drift means money is being created or destroyed — stop and fix that before looking at any other output.

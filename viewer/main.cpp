@@ -109,7 +109,7 @@ int main(int, char**) {
         return 1;
     }
 
-    SDL_Window* window = SDL_CreateWindow("economy", 1600, 1000, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("ATC", 1600, 1000, SDL_WINDOW_RESIZABLE);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (window == nullptr || renderer == nullptr) {
         std::fprintf(stderr, "SDL window/renderer failed: %s\n", SDL_GetError());

@@ -1,4 +1,4 @@
-# economy_viewer Implementation Plan
+# atc_viewer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +6,7 @@
 state, the distribution over agents, and the time series — with an exact scrub
 bar over the run.
 
-**Architecture:** A second executable, `economy_viewer`, that owns the `World`
+**Architecture:** A second executable, `atc_viewer`, that owns the `World`
 and ticks it in its own frame loop (a month is 1.4 ms; a frame is 16 ms, so no
 simulation thread is needed). All testable viewer logic — the sim wrapper,
 the recorder, the histogram binning — lives in a `viewer_core` library with no
@@ -30,11 +30,11 @@ task 7 for why the spec's documented fallback is where this starts.
   (`NO_FIRM` / `NO_HOUSEHOLD`).
 - The viewer does not reimplement the four success criteria;
   `scripts/validate.py` stays the single source of truth.
-- `ECONOMY_BUILD_VIEWER` defaults ON only when SDL3 is found, so a machine
-  without SDL3 still builds `economy` and `economy_tests`.
+- `ATC_BUILD_VIEWER` defaults ON only when SDL3 is found, so a machine
+  without SDL3 still builds `economy` and `atc_tests`.
 - Existing commands must keep working unchanged at every task boundary:
-  `cmake -S . -B build && cmake --build build -j`, `./build/economy_tests`,
-  `./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv`.
+  `cmake -S . -B build && cmake --build build -j`, `./build/atc_tests`,
+  `./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv`.
 
 ## File Structure
 
@@ -54,7 +54,7 @@ task 7 for why the spec's documented fallback is where this starts.
 | `third_party/imgui/` | Vendored, beside `doctest.h`. |
 
 `viewer_core` (CMake library) = `sim`, `ring_recorder`, `histogram`, `app`.
-It links `economy_core` and nothing else.
+It links `atc_core` and nothing else.
 
 ---
 
@@ -75,7 +75,7 @@ object with reference members inside a type we need to restore into.
 - Test: `tests/test_viewer_sim.cpp`
 
 **Interfaces:**
-- Consumes: `World`, `Rng`, `Scheduler`, `compute_metrics` from `economy_core`.
+- Consumes: `World`, `Rng`, `Scheduler`, `compute_metrics` from `atc_core`.
 - Produces:
   - `struct SimSnapshot { World world; Rng rng; int month; };`
   - `class Sim` with `explicit Sim(uint64_t seed);`
@@ -189,17 +189,17 @@ TEST_CASE("money is conserved across a seek") {
 - [ ] **Step 2: Wire the test into the build, then run it to verify it fails**
 
 In `CMakeLists.txt`, add the library and the new test sources. Insert after the
-`economy_core` target and before `enable_testing()`:
+`atc_core` target and before `enable_testing()`:
 
 ```cmake
 add_library(viewer_core
     viewer/sim.cpp
 )
-target_link_libraries(viewer_core PUBLIC economy_core)
+target_link_libraries(viewer_core PUBLIC atc_core)
 target_include_directories(viewer_core PUBLIC viewer)
 ```
 
-Add to the `economy_tests` source list:
+Add to the `atc_tests` source list:
 
 ```cmake
     tests/test_viewer_sim.cpp
@@ -208,7 +208,7 @@ Add to the `economy_tests` source list:
 and add `viewer_core` to its `target_link_libraries`:
 
 ```cmake
-target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
+target_link_libraries(atc_tests PRIVATE atc_core viewer_core)
 ```
 
 Run: `cmake -S . -B build && cmake --build build -j`
@@ -340,7 +340,7 @@ void Sim::seek(int target_month) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS, including all pre-existing cases (95 before this task).
 
 - [ ] **Step 5: Commit**
@@ -426,7 +426,7 @@ TEST_CASE("capacity of zero is rejected") {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Add `tests/test_viewer_ring.cpp` to the `economy_tests` sources and
+Add `tests/test_viewer_ring.cpp` to the `atc_tests` sources and
 `viewer/ring_recorder.cpp` to the `viewer_core` sources in `CMakeLists.txt`.
 
 Run: `cmake -S . -B build && cmake --build build -j`
@@ -507,7 +507,7 @@ value-initializes cleanly.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -602,7 +602,7 @@ TEST_CASE("a bin count below one is rejected") {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Add `tests/test_viewer_histogram.cpp` to `economy_tests` and
+Add `tests/test_viewer_histogram.cpp` to `atc_tests` and
 `viewer/histogram.cpp` to `viewer_core` in `CMakeLists.txt`.
 
 Run: `cmake -S . -B build && cmake --build build -j`
@@ -678,7 +678,7 @@ Histogram bin(const std::vector<double>& values, int bins) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cmake --build build -j && ./build/economy_tests`
+Run: `cmake --build build -j && ./build/atc_tests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -736,11 +736,11 @@ if(PkgConfig_FOUND)
   pkg_check_modules(SDL3 IMPORTED_TARGET sdl3)
 endif()
 
-option(ECONOMY_BUILD_VIEWER "Build the interactive viewer" ${SDL3_FOUND})
+option(ATC_BUILD_VIEWER "Build the interactive viewer" ${SDL3_FOUND})
 
-if(ECONOMY_BUILD_VIEWER)
+if(ATC_BUILD_VIEWER)
   if(NOT SDL3_FOUND)
-    message(FATAL_ERROR "ECONOMY_BUILD_VIEWER is ON but SDL3 was not found")
+    message(FATAL_ERROR "ATC_BUILD_VIEWER is ON but SDL3 was not found")
   endif()
 
   add_library(imgui STATIC
@@ -756,14 +756,14 @@ if(ECONOMY_BUILD_VIEWER)
   # Vendored third-party code does not have to satisfy our warning settings.
   target_compile_options(imgui PRIVATE -w)
 
-  add_executable(economy_viewer
+  add_executable(atc_viewer
       viewer/main.cpp
       viewer/app.cpp
       viewer/panel_agents.cpp
       viewer/panel_dist.cpp
       viewer/panel_time.cpp
   )
-  target_link_libraries(economy_viewer PRIVATE viewer_core imgui)
+  target_link_libraries(atc_viewer PRIVATE viewer_core imgui)
 endif()
 ```
 
@@ -926,10 +926,10 @@ The other two are the same shape with `"distributions"` / `"time"` and a
 
 - [ ] **Step 6: Build and run**
 
-Run: `cmake -S . -B build && cmake --build build -j 2>&1 | grep -E "warning|error" ; ./build/economy_viewer`
+Run: `cmake -S . -B build && cmake --build build -j 2>&1 | grep -E "warning|error" ; ./build/atc_viewer`
 Expected: no warnings from `viewer/` sources; a window opens; pressing "run"
-advances the month counter; `./build/economy_tests` still passes and
-`./build/economy --seed 1 --burn-in 10 --months 10 --out /tmp/x.csv` still works.
+advances the month counter; `./build/atc_tests` still passes and
+`./build/atc --seed 1 --burn-in 10 --months 10 --out /tmp/x.csv` still works.
 
 - [ ] **Step 7: Commit**
 
@@ -1203,7 +1203,7 @@ Add `#include <cstdio>` at the top for `std::snprintf`.
 
 - [ ] **Step 3: Build and check by hand**
 
-Run: `cmake --build build -j && ./build/economy_viewer`
+Run: `cmake --build build -j && ./build/atc_viewer`
 Expected: warning-clean; the firms tab sorts by clicking a header; selecting a
 firm shows its detail; clicking an employee index jumps to that household and
 its employer button jumps back.
@@ -1327,7 +1327,7 @@ void draw_dist_panel(App& app) {
 
 - [ ] **Step 2: Build and check by hand**
 
-Run: `cmake --build build -j && ./build/economy_viewer`
+Run: `cmake --build build -j && ./build/atc_viewer`
 Expected: seven histograms; clicking a firm-wage bin pins the agents panel's
 firm table to exactly those firms, and the "clear" button releases it.
 
@@ -1437,7 +1437,7 @@ Add `#include <cfloat>` at the top for `FLT_MAX`.
 
 - [ ] **Step 3: Build and check by hand**
 
-Run: `cmake --build build -j && ./build/economy_viewer`
+Run: `cmake --build build -j && ./build/atc_viewer`
 Expected: let it run a few hundred months, then drag the scrub bar backward —
 the agent table and the histograms show that month's real state, and dragging
 back to the latest month resumes cleanly. Backward seeks feel instant
@@ -1448,8 +1448,8 @@ back to the latest month resumes cleanly. Backward seeks feel instant
 Add a "Viewer" subsection under Commands documenting:
 
 ```bash
-cmake -S . -B build && cmake --build build -j   # builds economy_viewer if SDL3 is present
-./build/economy_viewer
+cmake -S . -B build && cmake --build build -j   # builds atc_viewer if SDL3 is present
+./build/atc_viewer
 ```
 
 and one paragraph: the viewer owns the `World` and ticks it in its frame loop;

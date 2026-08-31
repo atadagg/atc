@@ -28,7 +28,7 @@ The separation is already most of the way there and must stay that way:
 - `viewer_core` (`sim`, `ring_recorder`, `histogram`) is also ImGui-free,
   which is why the main test binary links it.
 - ImGui is confined to `viewer/main.cpp` and `viewer/panel_*.cpp`, and the
-  whole viewer is optional: `ECONOMY_BUILD_VIEWER` defaults off when SDL3
+  whole viewer is optional: `ATC_BUILD_VIEWER` defaults off when SDL3
   is absent, so the simulation and tests build with no UI library present.
 
 ImGui is a leaf, not a trunk. The problem is not contamination of the core.
@@ -82,7 +82,7 @@ part is testable without a window.
 
 ## Module boundary
 
-Four new files, all in `viewer_core`, which links `economy_core` and
+Four new files, all in `viewer_core`, which links `atc_core` and
 contains no ImGui or SDL. That property is a build-enforced invariant of
 this design.
 
@@ -93,7 +93,7 @@ this design.
 | `viewer/model_dist.{hpp,cpp}` | Which distributions exist; values behind each |
 | `viewer/model_time.{hpp,cpp}` | Which series exist; scrub bounds |
 
-`panel_*.cpp` stay in the `economy_viewer` target and shrink to rendering.
+`panel_*.cpp` stay in the `atc_viewer` target and shrink to rendering.
 
 `Filters` moves out of `App` into `cell.hpp`. The model layer must not know
 a running app exists — it reads a `World`, nothing more.
@@ -170,7 +170,7 @@ free of ImGui in substance; this moves it.
 ## Testing
 
 TDD. The payoff is that every part is testable with no window, in the
-existing `economy_tests` binary:
+existing `atc_tests` binary:
 
 - filters select exactly the right agents, including the pinned-firm set
 - sorting is correct and stable in both directions

@@ -20,7 +20,7 @@ namespace scenario {
 
 // Format, one record per line, blank lines and `#` comments ignored:
 //
-//   economy-scenario 1
+//   atc-scenario 1
 //   seed 42
 //   60  set_param  min_wage 12.5
 //   100 issue_all  <issuer> <amount each>

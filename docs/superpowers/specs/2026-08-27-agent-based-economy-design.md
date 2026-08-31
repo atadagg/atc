@@ -369,7 +369,7 @@ order; each attaches at a named module.
 
 ## 11. v1 results (2026-08-27, re-measured after the zero-wage fix)
 
-Measured with `./build/economy --seed 1 --burn-in 1000 --months 6000`
+Measured with `./build/atc --seed 1 --burn-in 1000 --months 6000`
 (1000 households, 100 firms, unmodified Table 1 calibration, no exogenous
 shocks) and `scripts/validate.py`. Money conservation: drift `0.0`, spread
 `2.0e-9` over the whole run — the master invariant holds throughout.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(economy CXX)
+project(atc CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +12,7 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-add_library(economy_core
+add_library(atc_core
     src/rng.cpp
     src/world.cpp
     src/ledger.cpp
@@ -26,7 +26,7 @@ add_library(economy_core
     src/scheduler.cpp
     src/recorder.cpp
 )
-target_include_directories(economy_core PUBLIC src)
+target_include_directories(atc_core PUBLIC src)
 
 add_library(viewer_core
     viewer/cell.cpp
@@ -39,11 +39,11 @@ add_library(viewer_core
     viewer/model_steering.cpp
     viewer/app.cpp
 )
-target_link_libraries(viewer_core PUBLIC economy_core)
+target_link_libraries(viewer_core PUBLIC atc_core)
 target_include_directories(viewer_core PUBLIC viewer)
 
 enable_testing()
-add_executable(economy_tests
+add_executable(atc_tests
     tests/test_main.cpp
     tests/test_rng.cpp
     tests/test_world.cpp
@@ -68,12 +68,12 @@ add_executable(economy_tests
     tests/test_viewer_model_steering.cpp
     tests/test_viewer_app.cpp
 )
-target_link_libraries(economy_tests PRIVATE economy_core viewer_core)
-target_include_directories(economy_tests PRIVATE third_party)
-add_test(NAME economy_tests COMMAND economy_tests)
+target_link_libraries(atc_tests PRIVATE atc_core viewer_core)
+target_include_directories(atc_tests PRIVATE third_party)
+add_test(NAME atc_tests COMMAND atc_tests)
 
-add_executable(economy src/main.cpp)
-target_link_libraries(economy PRIVATE economy_core)
+add_executable(atc src/main.cpp)
+target_link_libraries(atc PRIVATE atc_core)
 
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
@@ -84,11 +84,11 @@ if(NOT DEFINED SDL3_FOUND)
   set(SDL3_FOUND OFF)
 endif()
 
-option(ECONOMY_BUILD_VIEWER "Build the interactive viewer" ${SDL3_FOUND})
+option(ATC_BUILD_VIEWER "Build the interactive viewer" ${SDL3_FOUND})
 
-if(ECONOMY_BUILD_VIEWER)
+if(ATC_BUILD_VIEWER)
   if(NOT SDL3_FOUND)
-    message(FATAL_ERROR "ECONOMY_BUILD_VIEWER is ON but SDL3 was not found")
+    message(FATAL_ERROR "ATC_BUILD_VIEWER is ON but SDL3 was not found")
   endif()
 
   add_library(imgui STATIC
@@ -104,12 +104,12 @@ if(ECONOMY_BUILD_VIEWER)
   # Vendored third-party code does not have to satisfy our warning settings.
   target_compile_options(imgui PRIVATE -w)
 
-  add_executable(economy_viewer
+  add_executable(atc_viewer
       viewer/main.cpp
       viewer/panel_agents.cpp
       viewer/panel_dist.cpp
       viewer/panel_time.cpp
       viewer/panel_steering.cpp
   )
-  target_link_libraries(economy_viewer PRIVATE viewer_core imgui)
+  target_link_libraries(atc_viewer PRIVATE viewer_core imgui)
 endif()

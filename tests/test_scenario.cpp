@@ -55,7 +55,7 @@ TEST_CASE("an empty scenario round trips") {
 
 TEST_CASE("blank lines and comments are ignored") {
     std::istringstream in(
-        "economy-scenario 1\n"
+        "atc-scenario 1\n"
         "\n"
         "# a comment\n"
         "seed 3\n"
@@ -102,12 +102,12 @@ TEST_CASE("a malformed scenario is rejected rather than half-read") {
         CHECK_THROWS_AS(scenario::read(in), std::runtime_error);
     };
     rejects("not a scenario file\n");
-    rejects("economy-scenario 1\nseed 1\n60 set_param no_such_knob 1\n");
-    rejects("economy-scenario 1\nseed 1\n60 explode 1 2\n");
-    rejects("economy-scenario 1\nseed 1\n60 set_param min_wage\n");
-    rejects("economy-scenario 1\nseed 1\nsixty set_param min_wage 1\n");
-    rejects("economy-scenario 1\nseed notanumber\n");
-    rejects("economy-scenario 99\nseed 1\n");  // unknown format version
+    rejects("atc-scenario 1\nseed 1\n60 set_param no_such_knob 1\n");
+    rejects("atc-scenario 1\nseed 1\n60 explode 1 2\n");
+    rejects("atc-scenario 1\nseed 1\n60 set_param min_wage\n");
+    rejects("atc-scenario 1\nseed 1\nsixty set_param min_wage 1\n");
+    rejects("atc-scenario 1\nseed notanumber\n");
+    rejects("atc-scenario 99\nseed 1\n");  // unknown format version
 }
 
 TEST_CASE("a scenario built out of month order round trips by meaning") {

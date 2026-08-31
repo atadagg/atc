@@ -5,13 +5,13 @@
 # Watch the `total_money` column (money in circulation) step up by 50,000
 # while the books stay balanced -- money was created, and nothing was broken.
 #
-#   ./build/economy --burn-in 1000 --months 6000 \
+#   ./build/atc --burn-in 1000 --months 6000 \
 #       --scenario scenarios/stimulus.scenario --out output/stimulus.csv
 #
 # Months are counted from the start of the run, burn-in included, so month
 # 3000 here is measurement month 2000 in the CSV.
 
-economy-scenario 1
+atc-scenario 1
 seed 1
 
 3000 issue_all 0 50
