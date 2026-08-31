@@ -9,6 +9,7 @@
 #include <span>
 
 #include "identity_glyphs.hpp"
+#include "identity_lexicon.hpp"
 
 namespace identity {
 
@@ -59,5 +60,20 @@ struct Mark {
 };
 
 Mark mark(uint64_t seed);
+
+// ---- The name -------------------------------------------------------------
+
+enum class Strategy : uint8_t { Founder, Descriptive, Toponymic, Compound,
+                                Coined, Acronym, Evocative };
+
+// Fixed buffers, not std::string: Name stays trivially copyable like Mark.
+struct Name {
+    char     head[32];
+    char     tail[48];
+    Strategy strategy;
+    Locale   locale;
+};
+
+Name name(uint64_t seed, Locale locale);
 
 }  // namespace identity

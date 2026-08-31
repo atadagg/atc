@@ -1,6 +1,10 @@
 #include "identity.hpp"
 
+#include "identity_lexicon.hpp"
 #include "identity_palette.hpp"
+
+#include <cstring>
+#include <string>
 
 namespace identity {
 
@@ -47,6 +51,44 @@ uint32_t Stream::index(uint32_t n) {
     return n == 0 ? 0u : static_cast<uint32_t>(next() % n);
 }
 
+namespace {
+
+void put(char* dst, size_t cap, const char* src) {
+    const size_t len = std::strlen(src);
+    const size_t n = len < cap - 1 ? len : cap - 1;
+    std::memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
+void put2(char* dst, size_t cap, const char* a, const char* b, const char* sep) {
+    const std::string s = std::string(a) + sep + b;   // local only; never stored
+    put(dst, cap, s.c_str());
+}
+
+// Truncate-and-join: petrol+kimya -> Petkim. Byte-wise truncation would split
+// a UTF-8 sequence, so advance only to a lead byte.
+std::string truncate_utf8(const char* w, size_t want) {
+    const std::string s(w);
+    size_t i = 0, seen = 0;
+    while (i < s.size() && seen < want) {
+        ++i;
+        while (i < s.size() && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) ++i;
+        ++seen;
+    }
+    return s.substr(0, i);
+}
+
+// The first CODEPOINT, not the first byte. Half of a UTF-8 sequence is not a
+// letter: byte-wise initials turn Çelik into a broken glyph.
+std::string first_letter(const char* w) {
+    if (*w == '\0') return {};
+    size_t i = 1;
+    while (w[i] != '\0' && (static_cast<unsigned char>(w[i]) & 0xC0) == 0x80) ++i;
+    return std::string(w, i);
+}
+
+}  // namespace
+
 Mark mark(uint64_t seed) {
     Stream s(seed);
     Mark m{};
@@ -67,6 +109,55 @@ Mark mark(uint64_t seed) {
     m.lock     = pick_of(s, kLocks);
     m.font     = static_cast<uint8_t>(s.index(kFontCount));
     return m;
+}
+
+Name name(uint64_t seed, Locale locale) {
+    Stream s(seed ^ 0xA5A5A5A5A5A5A5A5ull);   // decorrelated from mark()
+    const Lexicon& L = lexicon(locale);
+    Name n{};
+    n.locale = locale;
+    n.strategy = static_cast<Strategy>(s.index(7));
+
+    switch (n.strategy) {
+    case Strategy::Founder:
+        put(n.head, sizeof(n.head), s.pick(L.surname));
+        put(n.tail, sizeof(n.tail), s.pick(L.sector));
+        break;
+    case Strategy::Descriptive:
+        put2(n.head, sizeof(n.head), s.pick(L.qual), s.pick(L.nature), "");
+        put(n.tail, sizeof(n.tail), s.pick(L.sector));
+        break;
+    case Strategy::Toponymic:
+        put(n.head, sizeof(n.head), s.pick(L.place));
+        put(n.tail, sizeof(n.tail), s.pick(L.sector));
+        break;
+    case Strategy::Compound:
+        put2(n.head, sizeof(n.head), s.pick(L.nature), s.pick(L.material), "");
+        put(n.tail, sizeof(n.tail), s.pick(L.legal));
+        break;
+    case Strategy::Coined: {
+        const std::string a = truncate_utf8(s.pick(L.material), 3 + s.index(2));
+        const std::string b = truncate_utf8(s.pick(L.sector),   3 + s.index(2));
+        put(n.head, sizeof(n.head), (a + b).c_str());
+        put(n.tail, sizeof(n.tail), s.pick(L.legal));
+        break;
+    }
+    case Strategy::Acronym: {
+        const char* w1 = s.pick(L.qual);
+        const char* w2 = s.pick(L.nature);
+        const char* w3 = s.pick(L.sector);
+        const std::string ini = first_letter(w1) + first_letter(w2) + first_letter(w3);
+        put(n.head, sizeof(n.head), ini.c_str());
+        const std::string full = std::string(w1) + " " + w2 + " " + w3;
+        put(n.tail, sizeof(n.tail), full.c_str());
+        break;
+    }
+    case Strategy::Evocative:
+        put(n.head, sizeof(n.head), s.pick(L.nature));
+        put(n.tail, sizeof(n.tail), s.pick(L.sector));
+        break;
+    }
+    return n;
 }
 
 }  // namespace identity
