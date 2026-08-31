@@ -131,7 +131,86 @@ rather than a traditional marketing-mix simulation. Exact mechanic
 (what a "test" looks like, what signal it returns, cost/speed of
 iterating) TBD.
 
+## Player Seats — how the game connects to the simulation
+
+The simulation (ATC, this repo) is the world. The game is not a separate
+program that reads its output; it is a set of **seats** inside it.
+
+**Any agent can be promoted from rule-driven to player-driven.** Firms,
+households and (once credit exists) banks all run on rules by default. Taking
+one over means its decisions come from a person instead of from
+`firm_decisions` / `household_decisions`; every other agent keeps running as an
+NPC around it. That is one mechanic, not one per sector — and it is what makes
+"play as a firm" and "play as a bank" the same feature.
+
+**The API for a seat already exists: the intervention log.** A run is
+`(seed + intervention log)`, applied at month open before any agent acts. A
+player action is an intervention. Consequences that follow:
+
+- A played session **is** a scenario file — save games are free, and readable.
+- The viewer's byte-exact backward scrub means you can rewind a decision and
+  replay it differently, with no save-state machinery.
+- Determinism (invariant 2) survives play, because play is recorded rather
+  than improvised into the world's state.
+
+Building a seat therefore means adding *intervention kinds*, not a parallel
+game state. Today there are three (`SetParam`, `Issue`, `IssueToAllHouseholds`).
+
+### The bank seat, and Apache Fineract
+
+Playing a bank is the most interesting seat, because a bank's decisions are
+where the macro consequences are largest — credit is the first real demand
+leakage this model has (see extension 7), and the leading explanation for why
+criterion 1 fails.
+
+**Apache Fineract** (the open-source core-banking platform for microfinance) is
+worth reading as a *domain textbook* for that seat — never as a foundation.
+What to take:
+
+- How a loan product decomposes: principal, repayment schedule, rate method,
+  fees, penalties. That is the menu of dials a player-bank sets.
+- What a bank operator actually needs on screen: portfolio at risk, delinquency
+  buckets, liquidity position. A ready-made panel list.
+- Its chart of accounts, as a skeleton for a bank agent's own balance sheet.
+
+**Why not build on it.** Fineract is a database application that happens to
+model money; this is closer to a physics engine that happens to model money.
+Three hard blockers, in order of severity:
+
+1. *Speed.* The reference run does ~855M transfers in 14 s — a transfer here is
+   one subtraction and one addition in cache. In Fineract each is a durable DB
+   transaction. Six orders of magnitude, and the profit distribution (82% of
+   movements, 100 x 1000 per month) is the exact shape a real bank never sees.
+2. *Determinism.* Thread pools, ORM iteration order, timestamps and
+   auto-increment ids would break invariant 2 *quietly* — runs would mostly
+   match, which is worse than obviously not matching.
+3. *Snapshots.* Backward scrub is a plain assignment of `World` (invariants 3
+   and 4). The equivalent is snapshotting a relational database every 50
+   simulated months and restoring it on a slider drag.
+
+The only sensible plumbing in that direction is an **export**: write the
+journal in a chart-of-accounts format real banking tooling can read. A
+converter, not a dependency.
+
+### Ordering
+
+Credit has to exist as a *model* first — households and firms borrowing by
+rule — before the bank is lifted out as a playable seat. Designing the seat's
+UI first means designing for mechanics that do not exist yet.
+
+### Scale mismatch to design around
+
+Fineract assumes a loan is a considered object with a human in the loop. This
+world has 1000 households and 21 days a month going past. A player-bank cannot
+approve loans one at a time: it needs **policy** (rules the sim executes on the
+player's behalf) with individual override for the interesting cases. That
+distinction — policy plus override, not per-item approval — is the main thing
+to redesign rather than copy, and it generalises to every seat, including the
+ERP-style firm seat.
+
 ## Open Questions
 - What engine/language to prototype in (not yet discussed).
 - Exact shape of the lean-testing loop for segment targeting.
 - Exact shape of the Stonks-9800-style hiring mechanic.
+- Which agent seats ship first, and what a firm (ERP-style) seat
+  actually exposes.

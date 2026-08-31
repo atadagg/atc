@@ -31,7 +31,7 @@ task 7 for why the spec's documented fallback is where this starts.
 - The viewer does not reimplement the four success criteria;
   `scripts/validate.py` stays the single source of truth.
 - `ATC_BUILD_VIEWER` defaults ON only when SDL3 is found, so a machine
-  without SDL3 still builds `economy` and `atc_tests`.
+  without SDL3 still builds `atc` and `atc_tests`.
 - Existing commands must keep working unchanged at every task boundary:
   `cmake -S . -B build && cmake --build build -j`, `./build/atc_tests`,
   `./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv`.
@@ -839,7 +839,7 @@ int main(int, char**) {
         return 1;
     }
 
-    SDL_Window* window = SDL_CreateWindow("economy", 1600, 1000, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("ATC", 1600, 1000, SDL_WINDOW_RESIZABLE);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (window == nullptr || renderer == nullptr) {
         std::fprintf(stderr, "SDL window/renderer failed: %s\n", SDL_GetError());

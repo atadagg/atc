@@ -54,7 +54,7 @@ Out of scope for this document:
 ## 3. Architecture
 
 A second executable, `atc_viewer`, linking the existing `atc_core`
-unchanged. The CLI (`economy`), the tests, and both Python scripts are
+unchanged. The CLI (`atc`), the tests, and both Python scripts are
 untouched by this work.
 
 ### 3.1 The viewer owns the World and ticks it in the frame loop
@@ -181,7 +181,7 @@ snapshots are kept for the whole run, so in practice this does not arise.
 - `scripts/plot.py` becomes largely redundant once phase C exists, but is not
   deleted by this work.
 
-The CSV path is unchanged: `economy --out run.csv` still produces exactly the
+The CSV path is unchanged: `atc --out run.csv` still produces exactly the
 file the scripts read.
 
 ## 6. Dependencies and risks

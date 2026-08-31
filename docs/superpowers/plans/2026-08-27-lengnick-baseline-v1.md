@@ -64,7 +64,7 @@ These are the exact published values. Use them verbatim; do not tune until the s
 
 | File | Responsibility |
 |---|---|
-| `CMakeLists.txt` | Build configuration; `atc_core` library, `economy` binary, `atc_tests` binary |
+| `CMakeLists.txt` | Build configuration; `atc_core` library, `atc` binary, `atc_tests` binary |
 | `third_party/doctest.h` | Vendored single-header test framework |
 | `src/params.hpp` | All calibration constants and run configuration. No logic. |
 | `src/rng.hpp` / `src/rng.cpp` | Deterministic seeded RNG wrapper |
@@ -2539,7 +2539,7 @@ git commit -m "feat: aggregate metrics and CSV recorder"
 
 **Interfaces:**
 - Consumes: everything
-- Produces: the `economy` binary, `./build/atc --seed N --months M --burn-in B --out PATH`
+- Produces: the `atc` binary, `./build/atc --seed N --months M --burn-in B --out PATH`
 
 - [ ] **Step 1: Write the failing burn-in independence test**
 
@@ -2654,8 +2654,8 @@ int main(int argc, char** argv) {
 - [ ] **Step 4: Register the binary in CMakeLists.txt**
 
 ```cmake
-add_executable(economy src/main.cpp)
-target_link_libraries(economy PRIVATE atc_core)
+add_executable(atc src/main.cpp)
+target_link_libraries(atc PRIVATE atc_core)
 ```
 
 - [ ] **Step 5: Build and run the full simulation**
