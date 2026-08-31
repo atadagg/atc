@@ -36,7 +36,7 @@ environment needs no sudo and touches nothing system-wide:
 ```bash
 python3 -m venv .venv                                   # .venv/ is gitignored
 .venv/bin/python -m pip install matplotlib pandas
-.venv/bin/python scripts/plot.py output/run.csv         # *.png + index.html
+.venv/bin/python scripts/plot.py output/run.csv         # writes the *.png
 ```
 
 (This file once claimed matplotlib "cannot be installed here." That was
@@ -49,43 +49,18 @@ criteria), `cycle.png` (the four cycle series on one time axis),
 consumption vs recorded demand vs capacity). The cycle and demand figures are
 windowed on the most volatile 240 months — at 6000 months the cycles overplot.
 
-`scripts/report.py` writes `output/index.html` — the review page, deliberately
-written for a non-economist. It leads with a one-sentence verdict, then states
-each of the five checks as a plain claim about the simulated world ("when jobs
-are scarce, pay stops rising"), with the academic name and the measured number
-demoted to a footnote under it. The figures follow, each with a caption saying
-what to look for and decoding the jargon printed inside the image. A raw-numbers
-table and a glossary sit at the bottom. Copying `output/` copies the whole
-review, page and figures together.
-
-Keep that register when editing it. The prose lives in the `CHECKS`, `FIGURES`
-and `GLOSSARY` tables at the top of the file; the per-run wording and the
-thresholds are in `check_rows`. `headline` special-cases a money-conservation
-failure — it says stop reading, because invariant 1 outranks every economic
-result on the page.
-
-Two thresholds there are judgement calls, not spec: unemployment spread ≥ 0.01
-and "the wealth gap does not close" read as late ≥ half of early. The 0.01 was
-drawn when a run measured 0.0285 — but that run is now known to have been
-inflated by the rewiring bug (see Status). The honest reading today is that
-the threshold is unvalidated and the current 0.0039 fails it by a wide
-enough margin that the exact line does not matter.
-
-Stdlib-only, so it runs without the venv; `plot.py` calls it at the end of its
-own run, and a figure that has not been drawn is named on the page rather than
-shown as a broken image. Household and firm counts are read out of
-`src/params.hpp` so they cannot drift.
-
-```bash
-python3 scripts/report.py output/run.csv    # page alone, no venv needed
-xdg-open output/index.html                  # read it
-```
-
 `scripts/validate.py` remains the stdlib-only path that needs no environment
 at all, and prints every number the success criteria need. Its `load` and
-`compute` are the single source of truth for the criteria math — `report.py`
-imports them, so the page and the terminal cannot drift. Add a criterion there,
-not in two places.
+`compute` are the single source of truth for the criteria math — `ensemble.py`
+imports them, so the per-seed and the across-seed numbers cannot drift. Add a
+criterion there, not in two places.
+
+`scripts/ensemble.py` runs N seeds in parallel and reports each criterion as
+mean/sd/min/max plus how many seeds agree on sign; a seed that dies is reported
+and the rest still summarised. `scripts/journal_stats.py` reconstructs the
+per-firm size distribution and the reason mix from a journal window — one wage
+entry per employee, so counting them gives each firm's headcount without adding
+anything to the recorder.
 
 ### Viewer
 
@@ -165,7 +140,8 @@ restarting the run.
 | `main.cpp` | CLI. The only file permitted console I/O. |
 
 Analysis lives in `scripts/`: `validate.py` (criteria math, stdlib),
-`report.py` (HTML review page, stdlib), `plot.py` (figures, matplotlib).
+`ensemble.py` (many seeds, stdlib), `journal_stats.py` (per-firm distributions
+from a journal window, stdlib), `plot.py` (figures, matplotlib).
 
 ### The tick
 
@@ -817,6 +793,21 @@ needs an issuer account and nothing else from that document. What remains:
   so this means a `Sim::reset(seed, log)` and clearing the snapshot history.
   Small, but it is a new entry point into the run and deserves its own tests.
 - ~~**Log serialization**~~ — **done**: `scenario.{hpp,cpp}`, `--scenario`.
+- **A counting journal, for stock-flow consistency.** The next piece of
+  analysis substrate, and the cheapest one left. A `SummaryJournal : Journal`
+  that accumulates totals per `Reason` per month instead of appending rows is
+  O(1) memory, so unlike `CsvJournal` it can stay on for a whole 6000-month
+  run. That buys nominal series the recorder does not have today — nominal
+  GDP, the wage share, velocity — and a per-month check that income equals
+  expenditure.
+
+  The gap it closes is worth stating plainly: `transfer` proves no *balance*
+  is ever wrong, and `books_balance()` proves the total never moves, but
+  nothing checks that the *flows* add up month to month. That is the one
+  accounting property the mature macro ABMs (Eurace, K+S) take seriously and
+  this model does not have. It also stops mattering less over time: once a
+  bank issues money, "where did this month's money come from" is the question
+  the whole extension turns on.
 
 ### Extensions, in dependency order
 

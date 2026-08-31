@@ -3,8 +3,8 @@
 Uses only `csv` and `math` from the standard library, so the four criteria can
 be measured with no third-party dependency and no virtual environment.
 (matplotlib and pandas *are* installable here -- see CLAUDE.md -- but nothing
-in this file needs them.) `scripts/report.py` imports `load` and `compute`
-from here so the HTML review page and this terminal output cannot drift apart.
+in this file needs them.) `scripts/ensemble.py` imports `load` and `compute`
+from here so the per-seed and across-seed numbers cannot drift apart.
 
 Usage: python3 scripts/validate.py [path/to/run.csv]
 """
@@ -77,7 +77,7 @@ def compute(rows):
     """Every number the success criteria need, as a flat dict.
 
     The single source of truth for the criteria math: `main` prints from this
-    dict and `scripts/report.py` renders the same dict into HTML.
+    dict and `scripts/ensemble.py` aggregates it across seeds.
     """
     n = len(rows)
 
