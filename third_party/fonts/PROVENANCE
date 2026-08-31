@@ -1,0 +1,22 @@
+Fonts are vendored rather than resolved at render time. A system font resolves
+against whoever is *viewing*, so the same firm would otherwise carry a
+different identity on every machine. Outlines are precompiled into
+src/identity_glyphs.hpp by scripts/gen_glyphs.py, so atc_core links no font
+parser and the rendered SVG contains no <text> element.
+
+DINish-Bold.ttf, DINish-Medium.ttf, DINishCondensed-Bold.ttf,
+DINishExpanded-Bold.ttf
+    DINish, by Christian Naths and contributors.
+    SIL Open Font License 1.1.
+    https://github.com/playbeing/dinish
+    Copied from /usr/share/fonts/dinish (Arch package ttf-dinish).
+
+FreeSerifBold.otf
+    GNU FreeFont, by the GNU FreeFont contributors.
+    GNU General Public License v3 with the font-embedding exception.
+    https://www.gnu.org/software/freefont/
+    Copied from /usr/share/fonts/gnu-free (Arch package gnu-free-fonts).
+
+The plan named FreeSerif.otf; the Bold cut is used instead. A logotype set in a
+regular serif goes thin against a bold sans in the same contact sheet, and the
+lockups are weight-matched by eye.

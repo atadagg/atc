@@ -13,11 +13,15 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/atc_tests                              # 217 cases
+./build/atc_tests                              # 241 cases
 ./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 
 ./build/atc --scenario scenarios/stimulus.scenario --out output/s.csv
+
+./build/atc --identity-sheet output/marks.svg --identity-count 256 \
+            --identity-locale turkish        # writes and exits; runs no months
+python3 scripts/identity_stats.py output/marks.svg
 ```
 
 A **scenario** is a save file and a reproducible experiment: `(seed +
@@ -141,6 +145,12 @@ restarting the run.
 | `scenario.{hpp,cpp}` | `Scenario` = seed + log; stream read/write. Streams, not paths — the core opens no files. |
 | `scheduler.{hpp,cpp}` | The day/month tick; applies due interventions at month open |
 | `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Records the nominal flow columns: `flow_purchase`, `flow_wage`, `flow_profit`, `flow_issuance`, `flow_discrepancy`. Also `CsvJournal`, the ledger's file sink. |
+| `identity.{hpp,cpp}` | Procedural firm identity: `mix`/`firm_seed`/`Stream`, the `Mark` grammar, the `Name` strategies, and `paint_at`/`ink_coverage`. **Never includes `rng.hpp`.** |
+| `identity_palette.hpp` | The 16 sanctioned palettes, plus `luminance`/`contrast`/`distance` — the floors are enforced by test, not by taste |
+| `identity_lexicon.{hpp,cpp}` | Per-locale word lists and their `verified` flag |
+| `identity_glyphs.hpp` | **Generated** by `scripts/gen_glyphs.py` — outlines for five vendored faces. Do not edit by hand |
+| `identity_glyphs.cpp` | Glyph lookup and the UTF-8 decoder |
+| `identity_svg.{hpp,cpp}` | Renders a mark and a name to SVG. Returns strings; opens no files |
 | `main.cpp` | CLI. The only file permitted console I/O. |
 
 Analysis lives in `scripts/`: `validate.py` (criteria math, stdlib),
@@ -248,7 +258,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 217 tests, 437,390 assertions.
+v1 complete and merged. 241 tests, 3,839,366 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** — now confirmed across **20 seeds**, not
 inferred from one; see "Criteria across 20 seeds" below, which also corrects
@@ -904,6 +914,49 @@ not by priority.
    reimplement drawing only, never re-derive filters, schemas or the link
    graph.
 
+### Firm identity
+
+Every firm has a logo and a company name derived from `mix(run_seed,
+firm_index)` — **no field is added to `Firm` or `World`**, and identity is a
+pure function of the seed, so firm 999,999 costs what firm 0 costs.
+
+The rule that makes it safe: **`identity` never touches `Rng`.** If it drew
+from the simulation's generator, how many logos the viewer happened to draw
+would change the economy. `tests/test_identity.cpp` proves it by running 40
+months with and without generating 5,000 identities per month and comparing
+the traces — and the sensitivity of that comparison is itself verified, by
+consuming one draw from the scheduler's own `Rng` and watching it fail.
+
+Locale is a **parameter of the name function, never a field**: `name(seed,
+locale)`. When regions arrive the region supplies it, so a Swedish firm in
+Vietnam is structurally impossible. Only Turkish is speaker-reviewed; the CLI
+prints `UNVERIFIED` for the rest, and `Lexicon::verified` is why it can.
+
+Fonts are **vendored and outlined to paths** (`third_party/fonts`,
+`scripts/gen_glyphs.py` → `src/identity_glyphs.hpp`). A system font resolves
+against whoever is *viewing*, so the same firm would otherwise have a different
+identity per machine. The rendered SVG therefore contains **zero `<text>`
+elements**, which is a test, not a convention.
+
+Three things the tests found, all worth keeping in mind:
+
+- **Hand-picked colour fails its own floors.** Of the 16 palettes first
+  written, one carried white below WCAG 4.5 and nine pairs sat closer than 40
+  in sRGB — two navies read as one colour. The table is now a hue sweep,
+  spaced by measurement.
+- **A charge below ~24 units of 100 vanishes at favicon size** — it covers no
+  cell of a 16×16 grid. The floor is 30, and bar charges cap at 32 so a wide
+  bar over a division does not read as two solid blocks. Fixed in the grammar;
+  the bound was not loosened.
+- **Repetition is set by the smallest pool, and by *slot overlap*.** Seven
+  Turkish names blew the 0.5% ceiling not because a list was short but because
+  words like Şahin and Yıldız sat in two head slots at once, so two strategies
+  drew them. There is a test that no word appears in more than one.
+
+Layout **measures rather than guesses**: every line is rendered at a size
+scaled to the space it was given, which is what the masthead's magic-offset bug
+came from not doing.
+
 ## Documents
 
 - `docs/superpowers/specs/2026-08-27-agent-based-economy-design.md` — the
@@ -917,6 +970,10 @@ not by priority.
 - `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` and
   `docs/superpowers/plans/2026-08-30-viewer-view-model.md` — the viewer's
   view-model layer: what it separates and why a second skin reuses it.
+- `docs/superpowers/specs/2026-08-31-firm-identity-design.md` and
+  `docs/superpowers/plans/2026-08-31-firm-identity.md` — the identity
+  generator: the three axes, the heraldic grammar, naming strategies over
+  per-locale lexicons, and why fonts are vendored.
 - `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md` — **the
   financial substrate**: the `transfer` chokepoint and the journal (both
   built), the balanced-events invariant with issuer accounts and enforced
@@ -951,6 +1008,14 @@ Real but judged not worth fixing yet. Reconsider when touching that code.
   compile. `constexpr` shared label constants would make it a build error.
 - The scrub bar's call site (`scrub_bounds(app.max_month)`) is not itself
   unit-tested — panels need a window. The rule it encodes is tested.
+- Viewer integration for identity is not built: `Cell` cannot carry a mark, and
+  `panel_agents` has no identity column. Needs a window, so different tests.
+- `identity_svg`'s silhouette and charge shapes mirror the predicates in
+  `identity.cpp` that `ink_coverage` samples, in two translation units. They
+  share `effective_charge_size` but not the shapes, so an edit to one can drift
+  from the other; only a rasterising test would catch it.
+- English, Japanese and German lexicons are unverified. `Lexicon::verified`
+  reports it and the CLI prints UNVERIFIED, but the words are still guesses.
 - `App::log` is appended to from the panel while `Sim` holds a `const Log*`,
   and `Log::due` hands out a span into the log's storage. Safe today because
   appends happen between steps on one thread; it would not survive stepping the

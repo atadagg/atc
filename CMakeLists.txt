@@ -25,6 +25,10 @@ add_library(atc_core
     src/month_close.cpp
     src/scheduler.cpp
     src/recorder.cpp
+    src/identity.cpp
+    src/identity_lexicon.cpp
+    src/identity_glyphs.cpp
+    src/identity_svg.cpp
 )
 target_include_directories(atc_core PUBLIC src)
 
@@ -59,6 +63,9 @@ add_executable(atc_tests
     tests/test_month_close.cpp
     tests/test_scheduler.cpp
     tests/test_recorder.cpp
+    tests/test_identity.cpp
+    tests/test_identity_names.cpp
+    tests/test_identity_svg.cpp
     tests/test_viewer_sim.cpp
     tests/test_viewer_ring.cpp
     tests/test_viewer_histogram.cpp

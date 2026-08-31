@@ -12,6 +12,7 @@
 #include "params.hpp"
 #include "ledger.hpp"
 #include "recorder.hpp"
+#include "identity_svg.hpp"
 #include "scenario.hpp"
 #include "rng.hpp"
 #include "scheduler.hpp"
@@ -44,6 +45,9 @@ int main(int argc, char** argv) {
     // window rather than the whole run.
     int journal_months = 1;
     std::string scenario_path;
+    std::string identity_sheet;
+    uint32_t identity_count = 256;
+    identity::Locale identity_locale = identity::Locale::Turkish;
 
     for (int i = 1; i < argc; i += 2) {
         std::string_view flag(argv[i]);
@@ -79,6 +83,35 @@ int main(int argc, char** argv) {
             out_path = std::string(value);
         } else if (flag == "--scenario") {
             scenario_path = std::string(value);
+        } else if (flag == "--identity-sheet") {
+            identity_sheet = std::string(value);
+        } else if (flag == "--identity-count") {
+            auto v = parse_long(value);
+            if (!v || *v <= 0) {
+                std::println(stderr,
+                             "error: --identity-count expects a positive integer, got '{}'",
+                             value);
+                return 1;
+            }
+            identity_count = static_cast<uint32_t>(*v);
+        } else if (flag == "--identity-locale") {
+            bool found = false;
+            for (uint8_t l = 0; l < static_cast<uint8_t>(identity::Locale::Count); ++l) {
+                std::string_view nm(identity::locale_name(static_cast<identity::Locale>(l)));
+                // Case-insensitive on the first letter only: the names are
+                // distinct from their second character onward.
+                if (value.size() == nm.size()
+                    && (value.substr(1) == nm.substr(1))
+                    && (value[0] == nm[0] || value[0] == nm[0] + 32)) {
+                    identity_locale = static_cast<identity::Locale>(l);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                std::println(stderr, "error: unknown locale '{}'", value);
+                return 1;
+            }
         } else if (flag == "--journal") {
             journal_path = std::string(value);
         } else if (flag == "--journal-months") {
@@ -94,6 +127,22 @@ int main(int argc, char** argv) {
             std::println(stderr, "error: unrecognized flag '{}'", flag);
             return 1;
         }
+    }
+
+    // The identity sheet is a generator, not a run: it writes and exits before
+    // any month is simulated. main owns the file handle so identity_svg stays
+    // stream-free (invariant 5).
+    if (!identity_sheet.empty()) {
+        std::ofstream out(identity_sheet);
+        if (!out) {
+            std::println(stderr, "error: cannot open '{}'", identity_sheet);
+            return 1;
+        }
+        out << identity::svg_sheet(seed, identity_count, identity_locale);
+        std::println("wrote {} ({} identities, locale {}{})", identity_sheet,
+                     identity_count, identity::locale_name(identity_locale),
+                     identity::lexicon(identity_locale).verified ? "" : ", UNVERIFIED");
+        return 0;
     }
 
     // A scenario carries its own seed, so it is loaded before the RNG exists.
