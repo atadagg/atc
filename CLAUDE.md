@@ -11,7 +11,7 @@ checkable macro behaviour; extensions are ordered, not optional.
 
 ```bash
 cmake -S . -B build && cmake --build build -j     # Release is the default
-./build/economy_tests                              # 205 cases
+./build/economy_tests                              # 217 cases
 ./build/economy --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 python3 scripts/validate.py output/run.csv         # stdlib only, no deps
 
@@ -50,7 +50,9 @@ consumption vs recorded demand vs capacity). The cycle and demand figures are
 windowed on the most volatile 240 months — at 6000 months the cycles overplot.
 
 `scripts/validate.py` remains the stdlib-only path that needs no environment
-at all, and prints every number the success criteria need. Its `load` and
+at all, and prints every number the success criteria need, plus the nominal
+side — GDP, wage share, velocity and the stock-flow discrepancy — from the flow
+columns. Its `load` and
 `compute` are the single source of truth for the criteria math — `ensemble.py`
 imports them, so the per-seed and the across-seed numbers cannot drift. Add a
 criterion there, not in two places.
@@ -126,7 +128,7 @@ restarting the run.
 | `params.hpp` | Structural `constexpr` (layout, initial conditions, run config) vs. the behavioural `Params` struct that lives on `World`. Respect that boundary. |
 | `agents.hpp` | `Firm` and `Household` plain structs, `NO_FIRM`/`NO_HOUSEHOLD` sentinel |
 | `world.{hpp,cpp}` | Owns the agent arrays and the issuer accounts; `money_in_circulation()` (a measurement) and `books_balance()` (the assertion) |
-| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write a balance, and the only place solvency is enforced; `Kind`/`may_issue`, `Journal`, `Entry`, `Reason` |
+| `ledger.{hpp,cpp}` | `transfer` — the only code permitted to write a balance, and the only place solvency is enforced; `Kind`/`may_issue`, `Journal`, `Entry`, `Reason`; `MonthFlows` + `SummaryJournal`, the O(1) flow account, and `check_flows` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
 | `network.{hpp,cpp}` | Household↔firm links (employment, shop connections) |
 | `firm_decisions.{hpp,cpp}` | Monthly: wage, hire/fire, price |
@@ -136,7 +138,7 @@ restarting the run.
 | `intervention.{hpp,cpp}` | The intervention log: `Params` table (name, accessors, valid range), `Intervention`, `Log`, `apply` |
 | `scenario.{hpp,cpp}` | `Scenario` = seed + log; stream read/write. Streams, not paths — the core opens no files. |
 | `scheduler.{hpp,cpp}` | The day/month tick; applies due interventions at month open |
-| `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Also `CsvJournal`, the ledger's file sink. |
+| `recorder.{hpp,cpp}` | `Metrics` + `Recorder` interface + `CsvRecorder`. Records demand-side series too: `demand`, `planned_consumption`, `inventory`, `household_liquidity`. Records the nominal flow columns: `flow_purchase`, `flow_wage`, `flow_profit`, `flow_issuance`, `flow_discrepancy`. Also `CsvJournal`, the ledger's file sink. |
 | `main.cpp` | CLI. The only file permitted console I/O. |
 
 Analysis lives in `scripts/`: `validate.py` (criteria math, stdlib),
@@ -244,7 +246,7 @@ Ordering is load-bearing and subtle:
 
 ## Status
 
-v1 complete and merged. 205 tests, 437,351 assertions.
+v1 complete and merged. 217 tests, 437,390 assertions.
 
 **Criterion 1 fails; 2, 3 and 4 pass** — now confirmed across **20 seeds**, not
 inferred from one; see "Criteria across 20 seeds" below, which also corrects
@@ -493,6 +495,81 @@ even a spot check would have missed it; it took a 20-seed ensemble to surface.
 **One seed is not a sample** — the same shape as the averaging artifact and
 the rewiring bug above.
 
+### Done: the flow account, and stock-flow consistency
+
+The model could always say where money *was*. It can now say where money
+*went*, and it checks the two against each other every month.
+
+- `ledger::MonthFlows` is one month of movement reduced to totals: per
+  `Reason`, and per sector (`household_in`/`out`, `firm_in`/`out`, `issued`).
+  O(1) memory, so unlike `CsvJournal` it stays attached for the whole 6000-month
+  run rather than a one-month window.
+- `ledger::SummaryJournal` is the journal that carries it. It wraps an optional
+  second journal, because `Scheduler` holds one journal pointer and the
+  `--journal` window still has to work; with nothing wrapped it declares it
+  wants no rows and the per-movement virtual call disappears.
+- Five new CSV columns: `flow_purchase`, `flow_wage`, `flow_profit`,
+  `flow_issuance`, `flow_discrepancy`. Always on — no flag.
+- `scripts/validate.py` derives nominal GDP, the wage share and velocity from
+  them, in `compute`, so `ensemble.py` reports them across seeds for free.
+
+**The check with teeth is the sector one, and this is why.** Per-`Reason`
+totals balance *trivially*: `transfer` is the only writer, so a movement is
+counted on both sides by construction and could not fail to. What is not
+trivial is reconciling the flows against the *stock*: net household receipts
+this month must equal the change in household liquidity. That is the one thing
+that notices a movement the journal never saw — a future module that writes a
+balance outside `transfer`, or moves money with no `Reason`. `check_flows`
+throws `FlowMismatch` above a tolerance relative to the money stock; the
+discrepancy is also recorded, so the crumb stays watchable while it is still a
+crumb. Measured over the reference run: **2.6e-9**, four orders of magnitude
+inside the tolerance.
+
+This is the third distinct accounting question, and they are worth keeping
+apart: `transfer` proves no *balance* is ever wrong, `books_balance()` proves
+the *total* never moves, and this proves the *flows* account for the change.
+
+**Measured (seed 1, 6000 post-burn-in months).** The reference run is
+**byte-identical** on every pre-existing column — this adds columns, it does
+not perturb the trajectory.
+
+| Quantity | Measured |
+|---|---|
+| nominal GDP (household purchases) | 60,020 /month, sd 118 |
+| wage share of nominal GDP | 0.857 |
+| velocity | 0.600 turns of the money stock per month |
+| max stock-flow discrepancy | 2.6e-9 |
+
+Nominal GDP is **household purchases only**. Profit distribution is excluded on
+purpose: it is a transfer of income, not output, and it is ~82% of all
+movements — counting it would inflate GDP roughly fivefold and measure the
+ownership proxy rather than the economy.
+
+**Performance, and the two rewrites it forced.** A journal is now attached for
+every measurement month, so anything on that path runs ~855 million times. The
+naive version — a `SummaryJournal` that accumulated in its own virtual
+`append` — cost **+12.5%**, almost exactly the price of 855M virtual
+dispatches. Two changes brought it to **+1.51%**, inside the spec's 2% budget:
+
+1. The tally moved into the **non-virtual** `Journal::record`, and the virtual
+   `append` is now reached only when something actually wants a row per
+   movement. (+12.5% → +3.25%.)
+2. `MonthFlows::add` became **branchless** — sector totals indexed by `Kind`
+   rather than two `switch`es, which were an indirect branch per movement.
+   (+3.25% → +1.51%.)
+
+Neither is a micro-optimization in the discretionary sense; on a path taken
+855M times, a virtual call is a design decision. Note also how the first
+measurement nearly lied: a cold first run of the *baseline* read 18.5s against
+its own warm 13.0s, which made the naive version look like +0.39%. **Discard
+the cold run, and interleave the two binaries** — the CLAUDE.md warning about
+this is load-bearing.
+
+**Also fixed here:** `recorder.cpp`'s `kind_name` returned `"household"` for
+`Kind::Issuer`, so issuance rows in the journal CSV named the wrong source. It
+predates issuers having a use; the stimulus scenario's journal window was
+mislabelling all 1,000 of its issuance rows.
+
 ### Criteria across 20 seeds
 
 Single-seed numbers had been carrying more weight than they could bear. The
@@ -539,7 +616,8 @@ Seed 1, burn-in 1000, 6000 measurement months, Release, this machine:
 | Of which profit distribution | ~82% |
 
 Anything added to `transfer` runs ~855 million times per reference run, so
-cost is a requirement rather than an afterthought — the budget is in the
+cost is a requirement rather than an afterthought — the flow account above is
+the worked example, where a virtual call on that path cost 12.5% — the budget is in the
 spec's Part 5. The 82% figure is a share of *movements*, not a profiled share
 of runtime; do not optimize on it without profiling first.
 
@@ -793,21 +871,7 @@ needs an issuer account and nothing else from that document. What remains:
   so this means a `Sim::reset(seed, log)` and clearing the snapshot history.
   Small, but it is a new entry point into the run and deserves its own tests.
 - ~~**Log serialization**~~ — **done**: `scenario.{hpp,cpp}`, `--scenario`.
-- **A counting journal, for stock-flow consistency.** The next piece of
-  analysis substrate, and the cheapest one left. A `SummaryJournal : Journal`
-  that accumulates totals per `Reason` per month instead of appending rows is
-  O(1) memory, so unlike `CsvJournal` it can stay on for a whole 6000-month
-  run. That buys nominal series the recorder does not have today — nominal
-  GDP, the wage share, velocity — and a per-month check that income equals
-  expenditure.
-
-  The gap it closes is worth stating plainly: `transfer` proves no *balance*
-  is ever wrong, and `books_balance()` proves the total never moves, but
-  nothing checks that the *flows* add up month to month. That is the one
-  accounting property the mature macro ABMs (Eurace, K+S) take seriously and
-  this model does not have. It also stops mattering less over time: once a
-  bank issues money, "where did this month's money come from" is the question
-  the whole extension turns on.
+- ~~**A counting journal, for stock-flow consistency**~~ — **done**, see Status.
 
 ### Extensions, in dependency order
 

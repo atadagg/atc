@@ -151,10 +151,39 @@ int main(int argc, char** argv) {
     // the movements.
     for (int m = 0; m < burn_in; ++m) scheduler.run_month();
 
+    // The summary stays attached for every measurement month -- it costs O(1)
+    // memory, so unlike the row-per-movement journal it does not need a window.
+    // The CsvJournal, when asked for, is wrapped inside it for its window.
+    ledger::SummaryJournal summary;
+    scheduler.set_journal(&summary);
+
+    double household_liquidity_before = 0.0;
+    for (const auto& h : world.households) household_liquidity_before += h.liquidity;
+
     for (int m = 0; m < months; ++m) {
-        scheduler.set_journal(m < journal_months ? journal.get() : nullptr);
+        summary.set_next(m < journal_months ? journal.get() : nullptr);
+        summary.begin_month(m);
         scheduler.run_month();
-        recorder->record(compute_metrics(world, m));
+
+        Metrics metrics = compute_metrics(world, m);
+        const double discrepancy = ledger::flow_discrepancy(
+            summary.flows(), household_liquidity_before, metrics.household_liquidity);
+        record_flows(metrics, summary.flows(), discrepancy);
+
+        // Stock-flow consistency. `books_balance()` proves the total never
+        // moves and `transfer` proves no balance goes wrong; this is the third
+        // question, and the one nothing asked before: do the flows the journal
+        // saw account for the change in the stock?
+        try {
+            ledger::check_flows(summary.flows(), household_liquidity_before,
+                                metrics.household_liquidity, metrics.total_money);
+        } catch (const ledger::FlowMismatch& e) {
+            std::println(stderr, "error: {}", e.what());
+            return 1;
+        }
+
+        recorder->record(metrics);
+        household_liquidity_before = metrics.household_liquidity;
     }
 
     // Two different questions. The books never move -- that is invariant 1, and

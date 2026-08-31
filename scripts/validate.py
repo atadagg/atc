@@ -60,7 +60,7 @@ def load(path):
     rows = []
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
-            rows.append({
+            r = {
                 "month": int(row["month"]),
                 "unemployment_rate": float(row["unemployment_rate"]),
                 "mean_price": float(row["mean_price"]),
@@ -69,7 +69,15 @@ def load(path):
                 "vacancies": float(row["vacancies"]),
                 "gini": float(row["gini"]),
                 "total_money": float(row["total_money"]),
-            })
+            }
+            # Flow columns arrived after the criteria columns did. A CSV
+            # written before them still loads; the nominal series are simply
+            # absent from `compute` rather than silently reported as zero.
+            for col in ("flow_purchase", "flow_wage", "flow_profit",
+                        "flow_issuance", "flow_discrepancy"):
+                if col in row:
+                    r[col] = float(row[col])
+            rows.append(r)
     return rows
 
 
@@ -111,7 +119,35 @@ def compute(rows):
     tenth = max(1, n // 10)
     m_min, m_max = min(total_money), max(total_money)
 
+    # The nominal side, from the flow columns. These are money that *moved*
+    # during the month, where every other column is a level at its end.
+    nominal = {}
+    if "flow_purchase" in rows[0]:
+        purchases = [r["flow_purchase"] for r in rows]
+        wage_bill = [r["flow_wage"] for r in rows]
+        discrepancy = [abs(r["flow_discrepancy"]) for r in rows]
+        # Household spending on goods is the model's only final expenditure,
+        # so it is nominal GDP on the expenditure side. Profit distribution is
+        # deliberately not counted: it is a transfer of income, not output, and
+        # it is ~82% of all movements -- adding it in would inflate GDP roughly
+        # fivefold and measure the ownership proxy rather than the economy.
+        nominal = {
+            "nominal_gdp_mean": mean(purchases),
+            "nominal_gdp_sd": stdev(purchases),
+            # Labour's cut of nominal output. The rest reaches households as
+            # the profit distribution, which is why this is well below 1.
+            "wage_share": mean([w / g for w, g in zip(wage_bill, purchases) if g != 0.0]),
+            # How many times the money stock turns over in purchases per month.
+            "velocity": mean([g / m for g, m in zip(purchases, total_money) if m != 0.0]),
+            "issuance_total": sum(r["flow_issuance"] for r in rows),
+            # Stock-flow consistency: the flows the journal saw, against the
+            # change in the household stock. The C++ side aborts a run above a
+            # tolerance, so a number here is a crumb, not a gap.
+            "flow_discrepancy_max": max(discrepancy),
+        }
+
     return {
+        **nominal,
         "n": n,
         "month_first": rows[0]["month"],
         "month_last": rows[-1]["month"],
@@ -179,6 +215,19 @@ def main():
           f"(an identity in v1 -- output IS employment; informative only once "
           f"productivity varies)")
     print()
+
+    # --- The nominal side ---
+    if "nominal_gdp_mean" in c:
+        print("Nominal flows (money that moved, per month)")
+        print(f"  nominal GDP (household purchases) = {c['nominal_gdp_mean']:.1f} "
+              f"(sd {c['nominal_gdp_sd']:.1f})")
+        print(f"  wage share of nominal GDP = {c['wage_share']:.4f}  "
+              f"(the rest reaches households as the profit distribution)")
+        print(f"  velocity = {c['velocity']:.4f} turns of the money stock per month")
+        print(f"  issued over the run = {c['issuance_total']:.2f}")
+        print(f"  stock-flow discrepancy: max |flow| - |change in stock| = "
+              f"{c['flow_discrepancy_max']:.3e}  (want machine epsilon)")
+        print()
 
     # --- Money conservation across the whole run ---
     print("Money conservation across the run")

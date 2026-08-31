@@ -65,6 +65,14 @@ Metrics compute_metrics(const World& w, int month) {
     return m;
 }
 
+void record_flows(Metrics& m, const ledger::MonthFlows& f, double discrepancy) {
+    m.flow_purchase = f.by_reason[ledger::reason_index(ledger::Reason::Purchase)];
+    m.flow_wage = f.by_reason[ledger::reason_index(ledger::Reason::Wage)];
+    m.flow_profit = f.by_reason[ledger::reason_index(ledger::Reason::Profit)];
+    m.flow_issuance = f.by_reason[ledger::reason_index(ledger::Reason::Issuance)];
+    m.flow_discrepancy = discrepancy;
+}
+
 CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
     if (!out_.is_open()) {
         throw std::runtime_error("CsvRecorder: cannot open output file: " + path);
@@ -72,7 +80,8 @@ CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
     out_ << std::setprecision(15);
     out_ << "month,unemployment_rate,mean_price,mean_wage,"
             "daily_capacity,vacancies,gini,total_money,"
-            "demand,planned_consumption,inventory,household_liquidity\n";
+            "demand,planned_consumption,inventory,household_liquidity,"
+            "flow_purchase,flow_wage,flow_profit,flow_issuance,flow_discrepancy\n";
 }
 
 void CsvRecorder::record(const Metrics& m) {
@@ -80,13 +89,20 @@ void CsvRecorder::record(const Metrics& m) {
          << m.mean_wage << ',' << m.daily_capacity << ',' << m.vacancies << ','
          << m.gini << ',' << m.total_money << ',' << m.demand << ','
          << m.planned_consumption << ',' << m.inventory << ','
-         << m.household_liquidity << '\n';
+         << m.household_liquidity << ',' << m.flow_purchase << ','
+         << m.flow_wage << ',' << m.flow_profit << ',' << m.flow_issuance << ','
+         << m.flow_discrepancy << '\n';
 }
 
 namespace {
 
 const char* kind_name(ledger::Kind k) {
-    return k == ledger::Kind::Firm ? "firm" : "household";
+    switch (k) {
+        case ledger::Kind::Firm:      return "firm";
+        case ledger::Kind::Household: return "household";
+        case ledger::Kind::Issuer:    break;
+    }
+    return "issuer";
 }
 
 const char* reason_name(ledger::Reason r) {
@@ -102,7 +118,7 @@ const char* reason_name(ledger::Reason r) {
 
 }  // namespace
 
-CsvJournal::CsvJournal(const std::string& path) : out_(path) {
+CsvJournal::CsvJournal(const std::string& path) : ledger::Journal(true), out_(path) {
     if (!out_.is_open()) {
         throw std::runtime_error("CsvJournal: cannot open output file: " + path);
     }

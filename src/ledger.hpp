@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
@@ -74,6 +75,54 @@ struct Entry {
     Reason reason = Reason::Unspecified;
 };
 
+// How many `Reason`s there are. `reason_index` is the tally slot for one, so a
+// widened `Reason` widens every total with it rather than leaving a new kind of
+// movement silently uncounted.
+inline constexpr std::size_t kReasonCount = 5;
+
+constexpr std::size_t reason_index(Reason r) { return static_cast<std::size_t>(r); }
+
+// One month of money movement, reduced to totals. This is a *flow* account: a
+// balance says where money ended up, a flow says how much moved and why, and
+// nothing in the model checked the second until this existed.
+struct MonthFlows {
+    int month = 0;
+    double by_reason[kReasonCount] = {};
+
+    // Sector totals, indexed by `Kind`. Indexed rather than named so that the
+    // hot path is three array adds and no branches at all: this runs on every
+    // movement, and a `switch` here is an indirect branch ~855 million times a
+    // run. The named accessors below are what the rest of the code reads.
+    double in_by_kind[3] = {};
+    double out_by_kind[3] = {};
+
+    static constexpr std::size_t slot(Kind k) { return static_cast<std::size_t>(k); }
+
+    // A movement within one sector counts on both sides and so nets to zero,
+    // which is what makes `in - out` the sector's net receipts.
+    double household_in() const { return in_by_kind[slot(Kind::Household)]; }
+    double household_out() const { return out_by_kind[slot(Kind::Household)]; }
+    double firm_in() const { return in_by_kind[slot(Kind::Firm)]; }
+    double firm_out() const { return out_by_kind[slot(Kind::Firm)]; }
+
+    // Net money created this month: out of issuer accounts, less what came
+    // back. Zero in Lengnick v1, which has an issuer but never uses it.
+    double issued() const {
+        return out_by_kind[slot(Kind::Issuer)] - in_by_kind[slot(Kind::Issuer)];
+    }
+
+    // Inline and branchless on purpose. This runs on every movement -- ~855
+    // million times in a reference run -- so it must not cost a virtual
+    // dispatch or an indirect branch. That is why the tally lives here and is
+    // called from the non-virtual `Journal::record`, rather than being a
+    // journal subclass of its own.
+    void add(Account from, Account to, double amount, Reason reason) {
+        by_reason[reason_index(reason)] += amount;
+        out_by_kind[slot(from.kind)] += amount;
+        in_by_kind[slot(to.kind)] += amount;
+    }
+};
+
 // The optional sink for entries. Opt-in on purpose: the reference run is
 // 7000 months of ~1000 households shopping daily, so recording every movement
 // unconditionally would dominate runtime and memory. Off by default; the
@@ -93,28 +142,122 @@ public:
     }
 
     // Called by `transfer` only, and only after the movement has succeeded.
+    //
+    // The month's totals are accumulated here, in non-virtual inline code, and
+    // the virtual `append` is reached only when something actually wants a row
+    // per movement. That ordering is a performance requirement, not a style
+    // choice: a journal is attached for every measurement month now, so a
+    // virtual call on this path would cost ~1.7s of a 13.5s reference run.
     void record(Account from, Account to, double amount, Reason reason) {
-        append(Entry{month_, day_, seq_++, from, to, amount, reason});
+        flows_.add(from, to, amount, reason);
+        if (rows_) append(Entry{month_, day_, seq_, from, to, amount, reason});
+        ++seq_;
     }
 
+    // Opens a new month, discarding the previous month's totals.
+    //
+    // Months are opened by the caller rather than inferred from the entries
+    // arriving. Inferring would silently fail to roll over a month in which no
+    // money moved, and a missing month is precisely the kind of gap the flow
+    // totals exist to make visible.
+    void begin_month(int month) {
+        flows_ = MonthFlows{};
+        flows_.month = month;
+    }
+
+    const MonthFlows& flows() const { return flows_; }
+
 protected:
+    // `rows` says whether this journal wants an `Entry` per movement. A journal
+    // that only totals says no and skips the virtual call entirely.
+    explicit Journal(bool rows) : rows_(rows) {}
+
+    void set_rows(bool rows) { rows_ = rows; }
+
     virtual void append(const Entry& e) = 0;
 
+    // Hands an already-built entry to another journal. A journal that wraps
+    // another needs this, and it stays out of the public interface so that
+    // `record` -- which stamps the clock and the sequence -- remains the only
+    // way an entry enters a journal from outside.
+    static void append_to(Journal& j, const Entry& e) { j.append(e); }
+
 private:
+    MonthFlows flows_;
     int month_ = 0;
     int day_ = kMonthClose;
     uint32_t seq_ = 0;
+    bool rows_ = true;
 };
 
 // Keeps every entry in memory. For tests and short analysis runs; a 6000-month
 // run would need gigabytes.
 class VectorJournal : public Journal {
 public:
+    VectorJournal() : Journal(true) {}
+
     std::vector<Entry> entries;
 
 protected:
     void append(const Entry& e) override { entries.push_back(e); }
 };
+
+// A journal that only totals. It exists so that the flow account can stay
+// attached for a whole 6000-month run, which `CsvJournal` cannot: totals are
+// O(1) in memory where rows are O(movements).
+//
+// It carries no accumulation of its own -- that lives in `Journal`, above, so
+// that it costs no virtual dispatch. What this class adds is the wrapping: the
+// scheduler holds one journal pointer, so wrapping is how the permanent totals
+// and a windowed `CsvJournal` coexist without a separate tee class. With no
+// wrapped journal it declares that it wants no rows, and the per-movement
+// virtual call disappears.
+class SummaryJournal : public Journal {
+public:
+    explicit SummaryJournal(Journal* next = nullptr)
+        : Journal(next != nullptr), next_(next) {}
+
+    // Swap the wrapped sink between months -- the mirror of
+    // `Scheduler::set_journal`, and how a journal window is opened and closed
+    // while the totals keep running.
+    void set_next(Journal* next) {
+        next_ = next;
+        set_rows(next != nullptr);
+    }
+
+protected:
+    void append(const Entry& e) override {
+        if (next_) append_to(*next_, e);
+    }
+
+private:
+    Journal* next_ = nullptr;
+};
+
+// The flows the journal saw do not account for the change in the stock. Money
+// moved without being journaled, or was written outside `transfer` altogether.
+class FlowMismatch : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+// (what came in, less what went out) minus the change in the stock. Zero to
+// machine precision when every movement was journaled.
+//
+// Per-reason totals cannot fail this way -- `transfer` balances them by
+// construction. Reconciling against the stock is the check with teeth: it is
+// the one that notices a movement the journal never saw.
+double flow_discrepancy(const MonthFlows& f, double household_liquidity_before,
+                        double household_liquidity_after);
+
+// Throws `FlowMismatch` when the discrepancy is too large to be rounding.
+// `scale` is the size of the money stock the comparison sits against; the
+// tolerance is relative to it, because a remainder of 1e-9 against 100,000 is
+// a summation crumb and the same number against 1e-6 is a real gap. Two
+// magnitudes, one tolerance -- the same distinction
+// `month_close::check_landed_on_target` draws.
+void check_flows(const MonthFlows& f, double household_liquidity_before,
+                 double household_liquidity_after, double scale);
 
 // Debits `from`, credits `to`, and -- if `journal` is non-null -- records the
 // movement once it has succeeded. A rejected transfer records nothing.

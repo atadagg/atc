@@ -48,6 +48,7 @@ add_executable(economy_tests
     tests/test_rng.cpp
     tests/test_world.cpp
     tests/test_ledger.cpp
+    tests/test_summary_journal.cpp
     tests/test_params.cpp
     tests/test_intervention.cpp
     tests/test_scenario.cpp

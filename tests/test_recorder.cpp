@@ -212,3 +212,20 @@ TEST_CASE("csv journal writes a header and one row per movement") {
 TEST_CASE("csv journal refuses an unopenable path") {
     CHECK_THROWS_AS(CsvJournal("no/such/directory/journal.csv"), std::runtime_error);
 }
+
+TEST_CASE("record_flows maps each Reason onto its metrics column") {
+    ledger::MonthFlows f;
+    f.by_reason[ledger::reason_index(ledger::Reason::Purchase)] = 11.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::Wage)] = 22.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::Profit)] = 33.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::Issuance)] = 44.0;
+
+    Metrics m;
+    record_flows(m, f, -0.5);
+
+    CHECK(m.flow_purchase == doctest::Approx(11.0));
+    CHECK(m.flow_wage == doctest::Approx(22.0));
+    CHECK(m.flow_profit == doctest::Approx(33.0));
+    CHECK(m.flow_issuance == doctest::Approx(44.0));
+    CHECK(m.flow_discrepancy == doctest::Approx(-0.5));
+}

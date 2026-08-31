@@ -30,7 +30,25 @@ struct Metrics {
     double planned_consumption = 0.0;
     double inventory = 0.0;
     double household_liquidity = 0.0;
+
+    // Flows: money that *moved* during the month just closed, in currency, as
+    // opposed to every other field here, which is a level measured at its end.
+    // A balance says where money ended up; these say how much moved and why.
+    // Nominal GDP, the wage share and velocity are derived from them in
+    // scripts/validate.py rather than computed twice.
+    double flow_purchase = 0.0;
+    double flow_wage = 0.0;
+    double flow_profit = 0.0;
+    double flow_issuance = 0.0;
+    // Net household receipts less the change in the household stock. Zero to
+    // machine precision unless a movement escaped the journal; recorded rather
+    // than merely asserted so the size of the crumb stays watchable.
+    double flow_discrepancy = 0.0;
 };
+
+// Copies one month of flow totals onto the metrics row. Keeps the mapping from
+// `Reason` to CSV column in one place, beside the writer that emits it.
+void record_flows(Metrics& m, const ledger::MonthFlows& f, double discrepancy);
 
 Metrics compute_metrics(const World& w, int month);
 

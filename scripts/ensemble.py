@@ -34,6 +34,10 @@ REPORTED = [
     ("gini_early", "Gini early", "{:.4f}"),
     ("gini_late", "Gini late", "{:.4f}"),
     ("money_spread", "books spread", "{:.2e}"),
+    ("nominal_gdp_mean", "nominal GDP", "{:.1f}"),
+    ("wage_share", "wage share", "{:.4f}"),
+    ("velocity", "velocity", "{:.4f}"),
+    ("flow_discrepancy_max", "flow discrepancy", "{:.2e}"),
 ]
 
 
@@ -103,6 +107,10 @@ def main():
     width = max(len(label) for _, label, _ in REPORTED)
     print(f"{'':<{width}}  {'mean':>12} {'sd':>12} {'min':>12} {'max':>12}")
     for key, label, fmt in REPORTED:
+        # The nominal rows are absent from a CSV written before the flow
+        # columns existed. Skip them rather than dying on a KeyError.
+        if not all(key in results[s] for s in seeds):
+            continue
         xs = [results[s][key] for s in seeds]
         sd = stdev(xs) if len(xs) > 1 else 0.0
         print(f"{label:<{width}}  {fmt.format(mean(xs)):>12} "
