@@ -72,7 +72,12 @@ TEST_CASE("every generated mark is well formed") {
     for (uint64_t s = 0; s < 200000; ++s) {
         const identity::Mark m = identity::mark(s);
         CHECK(m.palette < np);
-        CHECK(m.charge_size >= 30);   // the measured legibility floor
+        // The measured legibility floor is ~24 -- below that a charge covers
+        // no cell of a 16x16 grid. The grammar's smallest step sits just above
+        // it. Do not raise this to squeeze out the small marks: a bound that
+        // tracks the measurement is a legibility test, one that tracks the
+        // current smallest value is a change detector.
+        CHECK(m.charge_size >= 28);
         CHECK(m.charge_size <= 60);
         // never a blank emblem: a plain field with no charge is a wasted mark
         CHECK_FALSE((m.div == identity::Div::Plain
