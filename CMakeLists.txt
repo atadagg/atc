@@ -28,6 +28,7 @@ add_library(atc_core
     src/identity.cpp
     src/identity_lexicon.cpp
     src/identity_glyphs.cpp
+    src/identity_svg.cpp
 )
 target_include_directories(atc_core PUBLIC src)
 
