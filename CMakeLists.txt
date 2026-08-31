@@ -26,6 +26,7 @@ add_library(atc_core
     src/scheduler.cpp
     src/recorder.cpp
     src/identity.cpp
+    src/identity_lexicon.cpp
 )
 target_include_directories(atc_core PUBLIC src)
 
@@ -61,6 +62,7 @@ add_executable(atc_tests
     tests/test_scheduler.cpp
     tests/test_recorder.cpp
     tests/test_identity.cpp
+    tests/test_identity_names.cpp
     tests/test_viewer_sim.cpp
     tests/test_viewer_ring.cpp
     tests/test_viewer_histogram.cpp
