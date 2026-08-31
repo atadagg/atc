@@ -102,9 +102,14 @@ Mark mark(uint64_t seed) {
     // A plain field with no charge is a blank emblem.
     if (m.div == Div::Plain && m.charge == Charge::None) m.charge = Charge::Roundel;
 
-    // Floor of 30, not 12. Measured on a 16x16 grid, a charge below ~24 units
-    // covers no sampled cell at all: the emblem reads as a blank field.
-    m.charge_size = static_cast<uint8_t>(30 + s.index(4) * 10);
+    // Sizes {28, 36, 44, 52, 60}. The floor is set by measurement: on a 16x16
+    // grid a charge below ~24 units covers no sampled cell and the emblem reads
+    // as a blank field. It is deliberately NOT set higher than the measured
+    // bound -- an earlier fix raised it to 30 and cut the range to four steps,
+    // which removed every delicate mark and made the whole sheet read as one
+    // chunky emblem repeated. Legibility sets the floor; it does not get to
+    // set the spread.
+    m.charge_size = static_cast<uint8_t>(28 + s.index(5) * 8);
     const auto np = static_cast<uint32_t>(palettes().size());
     m.palette  = static_cast<uint8_t>(s.index(np));
     m.palette2 = static_cast<uint8_t>(s.index(np));
