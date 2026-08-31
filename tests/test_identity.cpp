@@ -1,9 +1,13 @@
 #include "doctest.h"
 #include "identity.hpp"
 #include "identity_palette.hpp"
+#include "params.hpp"
+#include "scheduler.hpp"
+#include "world.hpp"
 
 #include <cstring>
 #include <set>
+#include <vector>
 #include <type_traits>
 
 TEST_CASE("identity hash is stateless and order-independent") {
@@ -76,4 +80,38 @@ TEST_CASE("every generated mark is well formed") {
         if (m.sil != identity::Sil::Disc)
             CHECK(m.charge != identity::Charge::Cross);
     }
+}
+
+// ---- The test with teeth --------------------------------------------------
+// The others check the generator works. This one checks it cannot reach into
+// the simulation. Its static counterpart is a grep, kept here as intent:
+//
+//   ! grep -r "rng.hpp" src/identity*.hpp src/identity*.cpp && echo clean
+
+namespace {
+std::vector<double> run_months(int months, bool generate_identities) {
+    Rng rng(1234);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    Scheduler sched(w, rng);
+    std::vector<double> trace;
+    for (int m = 0; m < months; ++m) {
+        if (generate_identities)
+            for (uint32_t f = 0; f < 5000; ++f) {
+                (void)identity::mark(identity::firm_seed(1234, f));
+                (void)identity::name(identity::firm_seed(1234, f),
+                                     identity::Locale::Turkish);
+            }
+        sched.run_month();
+        trace.push_back(w.money_in_circulation());
+        trace.push_back(w.firms[0].liquidity);
+        trace.push_back(w.households[0].liquidity);
+    }
+    return trace;
+}
+}  // namespace
+
+TEST_CASE("generating identities cannot perturb the simulation") {
+    // If identity ever drew from Rng, how many logos the viewer happened to
+    // draw would change the economy. This is invariant 2 (spec Part 1).
+    CHECK(run_months(40, false) == run_months(40, true));
 }
