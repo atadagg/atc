@@ -993,16 +993,11 @@ font. Without it, `ş`/`ğ`/`İ` in firm names print as `?`.
 - `docs/superpowers/specs/2026-08-27-agent-based-economy-design.md` — the
   design and the binding scope decisions. §7 is what is deliberately out of
   scope and why; §8 is the extension map; §11 is the measured v1 results.
-- `docs/superpowers/plans/2026-08-27-lengnick-baseline-v1.md` — the
-  implementation plan, including Lengnick's full Table 1 calibration.
-- `docs/superpowers/specs/2026-08-28-economy-viewer-design.md` and
-  `docs/superpowers/plans/2026-08-28-economy-viewer.md` — the live SDL3 +
-  ImGui front-end: snapshot/seek, the recorder ring, the panels.
-- `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` and
-  `docs/superpowers/plans/2026-08-30-viewer-view-model.md` — the viewer's
-  view-model layer: what it separates and why a second skin reuses it.
-- `docs/superpowers/specs/2026-08-31-firm-identity-design.md` and
-  `docs/superpowers/plans/2026-08-31-firm-identity.md` — the identity
+- `docs/superpowers/specs/2026-08-28-economy-viewer-design.md` — the live
+  SDL3 + ImGui front-end: snapshot/seek, the recorder ring, the panels.
+- `docs/superpowers/specs/2026-08-30-viewer-view-model-design.md` — the
+  viewer's view-model layer: what it separates and why a second skin reuses it.
+- `docs/superpowers/specs/2026-08-31-firm-identity-design.md` — the identity
   generator: the three axes, the heraldic grammar, naming strategies over
   per-locale lexicons, and why fonts are vendored.
 - `docs/superpowers/specs/2026-08-31-ledger-and-journal-design.md` — **the
@@ -1012,6 +1007,10 @@ font. Without it, `ş`/`ğ`/`İ` in firm names print as `?`.
   what belongs to the engine from what belongs to Lengnick v1; Part 5 is the
   measured performance budget. Opens in plain language — read that section
   first if the accounting vocabulary is unfamiliar.
+- `docs/superpowers/plans/done/` — executed implementation plans (v1, viewer,
+  view-model, identity). Archived: every one is finished and its outcome is
+  recorded in Status above. History, not context — do not read them to find
+  out what to do next.
 - `DESIGN.md` — the originating concept: a magic-capitalism tycoon/grand-
   strategy game. This simulation is the economic substrate that design
   silently assumed. Retained deliberately.
