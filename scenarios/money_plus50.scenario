@@ -1,0 +1,24 @@
+# Money neutrality test: does the size of the money stock change the
+# *real* economy, or only the price level?
+#
+# At month 200 -- inside the 1000-month burn-in -- every household is handed
+# 50, raising money in circulation from 100,000 to 150,000 and leaving 800
+# months for the economy to re-equilibrate before measurement begins. That
+# timing is the whole point: `scenarios/stimulus.scenario` fires mid-
+# measurement and shows the *transient*, which is a different question.
+#
+# The prediction, if Lengnick v1 is a closed circular flow in which the price
+# level floats until real demand equals capacity: prices and wages rise by
+# roughly 50% and unemployment does not move at all. If unemployment instead
+# falls and stays down, money is not neutral here and creating money is by
+# itself a lever on the real economy.
+#
+#   python3 scripts/ensemble.py --seeds 20 --scenario scenarios/money_plus50.scenario
+#
+# The seed is overridden by the ensemble's --seed, so this one file is the
+# treatment applied to all 20 histories.
+
+atc-scenario 1
+seed 1
+
+200 issue_all 0 50

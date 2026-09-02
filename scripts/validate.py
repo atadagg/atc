@@ -151,6 +151,13 @@ def compute(rows):
         "n": n,
         "month_first": rows[0]["month"],
         "month_last": rows[-1]["month"],
+        # The nominal levels. Kept alongside the real ones because the two
+        # together are what distinguishes a change in the price level from a
+        # change in the economy: money neutrality means these move and
+        # `u_mean` does not.
+        "price_mean": mean([r["mean_price"] for r in rows]),
+        "wage_mean": mean(wages),
+        "money_mean": mean(total_money),
         "u_mean": mean(unemployment),
         "u_sd": stdev(unemployment),
         "u_min": min(unemployment),

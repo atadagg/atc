@@ -34,6 +34,9 @@ REPORTED = [
     ("gini_early", "Gini early", "{:.4f}"),
     ("gini_late", "Gini late", "{:.4f}"),
     ("money_spread", "books spread", "{:.2e}"),
+    ("money_mean", "money stock", "{:.1f}"),
+    ("price_mean", "price level", "{:.4f}"),
+    ("wage_mean", "wage level", "{:.4f}"),
     ("nominal_gdp_mean", "nominal GDP", "{:.1f}"),
     ("wage_share", "wage share", "{:.4f}"),
     ("velocity", "velocity", "{:.4f}"),
@@ -41,13 +44,18 @@ REPORTED = [
 ]
 
 
-def run_one(binary, seed, burn_in, months, out_dir):
+def run_one(binary, seed, burn_in, months, out_dir, scenario=None):
     out = Path(out_dir) / f"seed{seed}.csv"
-    proc = subprocess.run(
-        [binary, "--seed", str(seed), "--burn-in", str(burn_in),
-         "--months", str(months), "--out", str(out)],
-        capture_output=True, text=True,
-    )
+    # `--seed` after `--scenario` is what makes one scenario file serve a whole
+    # ensemble: the CLI seed overrides the file's, so the intervention log is
+    # held fixed while the dice change. That is the shape an experiment wants --
+    # one treatment, N histories.
+    cmd = [binary]
+    if scenario:
+        cmd += ["--scenario", str(scenario)]
+    cmd += ["--seed", str(seed), "--burn-in", str(burn_in),
+            "--months", str(months), "--out", str(out)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
         # A seed that dies is a finding, not a reason to abandon the other
         # nineteen: the failure rate across seeds is exactly what an ensemble
@@ -63,6 +71,8 @@ def main():
     ap.add_argument("--burn-in", type=int, default=1000)
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--binary", default="./build/atc")
+    ap.add_argument("--scenario", default=None,
+                    help="apply this scenario's intervention log to every seed")
     ap.add_argument("--dir", default=None,
                     help="where to write the per-seed CSVs (default: a temp dir)")
     args = ap.parse_args()
@@ -83,7 +93,8 @@ def main():
     failures = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [pool.submit(run_one, args.binary, s, args.burn_in,
-                               args.months, out_dir) for s in seeds]
+                               args.months, out_dir, args.scenario)
+                   for s in seeds]
         for done in concurrent.futures.as_completed(futures):
             seed, c, err = done.result()
             if c is None:
