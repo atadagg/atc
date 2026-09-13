@@ -456,3 +456,171 @@ TEST_CASE("at commoditization 0 the single-good world is untouched") {
     CHECK(daily::sellers_compared(w, 0) == 1u);
     CHECK(daily::switch_probability(w, 0) == doctest::Approx(0.0));
 }
+
+// ---------------------------------------------------------------------------
+// Task 14b: the firm side gets the household side's TWO draws, for the same
+// reason -- an unopposed size weighting makes a new entrant undiscoverable.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// ore(0) -> bread(1), with ore firm 0 a large incumbent and ore firm 1 a
+// zero-employee entrant. Firms 2-4 make bread. Every supplier slot is empty.
+World entrant_world(Rng& rng) {
+    World w = two_stage_world(rng);
+    for (Firm& f : w.firms) f.employees.clear();
+    for (Household& h : w.households) h.employer = NO_FIRM;
+    for (uint32_t i = 0; i < 40; ++i) w.firms[0].employees.push_back(i);  // incumbent
+    // firm 1 stays at zero employees: the entrant.
+    for (uint32_t i = 0; i < 5; ++i) w.firms[i].price = 1.0;
+    for (uint32_t i = 2; i < 5; ++i) {
+        w.firms[i].suppliers.fill(NO_FIRM);
+        w.firms[i].input_unsatisfied.fill(0.0);
+    }
+    return w;
+}
+
+}  // namespace
+
+TEST_CASE("the unweighted producer draw is flat; the weighted one is not") {
+    Rng setup(11);
+    World w = entrant_world(setup);
+    REQUIRE(w.firms[0].employees.size() == 40u);
+    REQUIRE(w.firms[1].employees.empty());
+
+    // The buyer holds no ore supplier, so both ore firms are eligible on
+    // every draw and a flat draw must split 50/50.
+    const int kDraws = 40000;
+    Rng flat_rng(3);
+    int flat_entrant = 0;
+    for (int i = 0; i < kDraws; ++i) {
+        if (network::random_unconnected_producer_unweighted(w, 2, 0, flat_rng) == 1u) {
+            ++flat_entrant;
+        }
+    }
+    const double flat_share = static_cast<double>(flat_entrant) / kDraws;
+    CHECK(flat_share > 0.47);
+    CHECK(flat_share < 0.53);
+
+    // The weighted draw, on the same world, must still favour the incumbent
+    // by roughly its employee count -- it is kept for the price-tested path.
+    Rng weighted_rng(3);
+    int weighted_entrant = 0;
+    for (int i = 0; i < kDraws; ++i) {
+        if (network::random_unconnected_producer(w, 2, 0, weighted_rng) == 1u) {
+            ++weighted_entrant;
+        }
+    }
+    const double weighted_share = static_cast<double>(weighted_entrant) / kDraws;
+    CHECK(weighted_share < 0.05);  // 1 / (41 + 1) ~= 0.024
+
+    // The whole point: unambiguously different draws, not two spellings of one.
+    CHECK(flat_share > weighted_share * 5.0);
+}
+
+TEST_CASE("the stickiness path does not switch to a more expensive challenger") {
+    Rng setup(12);
+    World w = entrant_world(setup);
+    REQUIRE(daily::switch_probability(w, 0) > 0.0);  // ore is switchable at all
+
+    // Bread firm 2 buys all three ore slots from firm 0 at 1.0. The only
+    // possible challenger, firm 1, is five times dearer. No slot is rationed,
+    // so the only live path is stickiness -- which must apply a price test.
+    w.firms[0].price = 1.0;
+    w.firms[1].price = 5.0;
+    w.firms[2].suppliers.fill(0u);
+    w.firms[2].input_unsatisfied.fill(0.0);
+
+    Rng rng(4);
+    for (int month = 0; month < 500; ++month) {
+        for (uint32_t i = 2; i < 5; ++i) {
+            w.firms[i].suppliers.fill(0u);
+            w.firms[i].input_unsatisfied.fill(0.0);
+        }
+        firm_decisions::rewire_suppliers(w, rng);
+        for (uint32_t k = 0; k < params::kSuppliersPerInput; ++k) {
+            REQUIRE(w.firms[2].suppliers[k] == 0u);
+        }
+    }
+
+    // Converse: the same path DOES switch when the challenger is genuinely
+    // cheaper, so the test above is not passing for want of any switching.
+    w.firms[1].price = 0.5;
+    bool switched = false;
+    for (int month = 0; month < 500 && !switched; ++month) {
+        for (uint32_t i = 2; i < 5; ++i) {
+            w.firms[i].suppliers.fill(0u);
+            w.firms[i].input_unsatisfied.fill(0.0);
+        }
+        firm_decisions::rewire_suppliers(w, rng);
+        for (uint32_t k = 0; k < params::kSuppliersPerInput; ++k) {
+            if (w.firms[2].suppliers[k] == 1u) switched = true;
+        }
+    }
+    CHECK(switched);
+}
+
+TEST_CASE("the rationed path rewires unconditionally, price notwithstanding") {
+    Rng setup(13);
+    World w = entrant_world(setup);
+
+    // Every slot held by firm 0, every slot rationed, and the only
+    // alternative -- the zero-employee entrant -- is far dearer. Rationing
+    // applies no price test, so the buyer must leave anyway.
+    w.firms[0].price = 1.0;
+    w.firms[1].price = 100.0;
+
+    for (int trial = 0; trial < 200; ++trial) {
+        for (uint32_t i = 2; i < 5; ++i) {
+            w.firms[i].suppliers.fill(0u);
+            w.firms[i].input_unsatisfied.fill(1.0);
+        }
+        Rng rng(static_cast<uint64_t>(trial) + 100u);
+        firm_decisions::rewire_suppliers(w, rng);
+        // Slot 0 is rationed and must move; the only eligible producer is 1.
+        REQUIRE(w.firms[2].suppliers[0] == 1u);
+    }
+
+    // And the shortfall is consumed, as Household::unsatisfied is.
+    for (uint32_t k = 0; k < params::kSuppliersPerInput; ++k) {
+        CHECK(w.firms[2].input_unsatisfied[k] == doctest::Approx(0.0));
+    }
+}
+
+TEST_CASE("a cheap stocked-out seller is still visited and still records demand") {
+    Rng setup(14);
+    World w = entrant_world(setup);
+    REQUIRE(daily::sellers_compared(w, 0) > 1u);  // ore is a compared good
+
+    // Ore firm 1 is the cheap entrant with EMPTY shelves; ore firm 0 is dear
+    // and fully stocked. Demand in this model is what was WANTED, not bought,
+    // so the empty-shelved entrant must still hear the want -- that is the
+    // only way it ever opens a vacancy.
+    w.firms[0].price = 10.0;
+    w.firms[0].inventory = 1.0e6;
+    w.firms[1].price = 1.0;
+    w.firms[1].inventory = 0.0;
+
+    Firm& buyer = w.firms[2];
+    buyer.suppliers.fill(1u);
+    buyer.suppliers[0] = 0u;  // one dear stocked slot, two cheap empty ones
+    buyer.input_demand[0] = 210.0;
+    buyer.liquidity = 1.0e9;
+
+    Rng rng(9);
+    int days_heard = 0;
+    const int kDays = 300;
+    for (int d = 0; d < kDays; ++d) {
+        w.firms[1].demand_this_month = 0.0;
+        w.firms[1].inventory = 0.0;
+        w.firms[0].inventory = 1.0e6;
+        buyer.input_unsatisfied.fill(0.0);
+        buyer.payable_to.fill(NO_FIRM);
+        buyer.payable_amount.fill(0.0);
+        daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+        if (w.firms[1].demand_this_month > 0.0) ++days_heard;
+    }
+    // Sorting empty shelves to the back made this exactly zero: the buyer
+    // filled up at the dear stocked seller and broke out of the visit loop.
+    CHECK(days_heard > kDays / 2);
+}

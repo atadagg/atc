@@ -129,26 +129,49 @@ void rewire_suppliers(World& w, Rng& rng) {
                 const uint32_t slot = base + k;
                 const bool empty_slot = f.suppliers[slot] == NO_FIRM;
                 const bool rationed = f.input_unsatisfied[slot] > 0.0;
-                if (!empty_slot && !rationed) {
-                    // Commoditization channel three: a buyer of a commodity
-                    // shops around even when it was served, a bespoke buyer
-                    // does not. Without this the only way a supplier link
-                    // ever moves is rationing, so a newly founded firm with
-                    // no customers is never discovered by anyone.
-                    //
-                    // The draw is taken ONLY when the probability is
-                    // positive. At commoditization 0 -- the whole of the
-                    // legacy single-good world -- no randomness is consumed
-                    // and this is exactly the old `continue` (invariant 2).
-                    const double p = daily::switch_probability(w, g.inputs[s]);
-                    if (!(p > 0.0)) continue;
-                    if (!rng.chance(p)) continue;
+
+                if (empty_slot || rationed) {
+                    // No price test applies here -- an empty slot has no
+                    // incumbent to compare against, and a rationed slot is
+                    // being left because it could not supply, not because it
+                    // was dear. So the draw must be UNWEIGHTED: a size
+                    // weighting with nothing opposing it routes every buyer
+                    // from one large incumbent to the next and leaves a new
+                    // entrant undiscoverable. This is the firm-side mirror of
+                    // household_decisions::search_reliable_shop.
+                    uint32_t replacement = network::random_unconnected_producer_unweighted(
+                        w, i, g.inputs[s], rng);
+                    if (replacement == NO_FIRM) continue;  // no eligible producer left
+                    f.suppliers[slot] = replacement;
+                    continue;
                 }
 
-                uint32_t replacement =
+                // Commoditization channel three: a buyer of a commodity
+                // shops around even when it was served, a bespoke buyer
+                // does not. Without this the only way a supplier link
+                // ever moves is rationing.
+                //
+                // The draw is taken ONLY when the probability is
+                // positive. At commoditization 0 -- the whole of the
+                // legacy single-good world -- no randomness is consumed
+                // and this is exactly the old `continue` (invariant 2).
+                const double p = daily::switch_probability(w, g.inputs[s]);
+                if (!(p > 0.0)) continue;
+                if (!rng.chance(p)) continue;
+
+                // Size-weighted here, and only here: this is the visibility
+                // draw, and the price test below is what opposes it. Mirrors
+                // household_decisions::search_cheaper_shop exactly.
+                uint32_t challenger =
                     network::random_unconnected_producer(w, i, g.inputs[s], rng);
-                if (replacement == NO_FIRM) continue;  // no eligible producer left
-                f.suppliers[slot] = replacement;
+                if (challenger == NO_FIRM) continue;  // no eligible producer left
+
+                const double incumbent_price = w.firms[f.suppliers[slot]].price;
+                const double challenger_price = w.firms[challenger].price;
+                // Switch only if the challenger is at least xi cheaper.
+                if (challenger_price <= incumbent_price * (1.0 - w.params.price_switch_threshold)) {
+                    f.suppliers[slot] = challenger;
+                }
             }
         }
 

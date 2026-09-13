@@ -43,4 +43,17 @@ uint32_t random_unconnected_firm(const World& w, uint32_t household, Rng& rng);
 // input. See CLAUDE.md on why the rewiring draws are kept apart.
 uint32_t random_unconnected_producer(const World& w, uint32_t firm, uint32_t good, Rng& rng);
 
+// Draw a producer of `good` that `firm` does not already buy from, with EQUAL
+// probability regardless of size. This is the firm-side twin of
+// random_unconnected_firm, and it is unweighted for exactly the same reason:
+// the paths that use it -- filling an empty supplier slot, and replacing a
+// supplier that rationed the firm -- apply no price test, so a size weighting
+// there would be unopposed. Unopposed, it made a newly founded upstream firm
+// a ~0.25% draw against five incumbents at ~80 employees, which left it
+// permanently idle and unkillable. The weighting belongs only on the
+// stickiness path, where an explicit price comparison decides the switch.
+// Returns NO_FIRM if every living producer is already connected.
+uint32_t random_unconnected_producer_unweighted(const World& w, uint32_t firm, uint32_t good,
+                                                Rng& rng);
+
 }  // namespace network

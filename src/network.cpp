@@ -56,12 +56,37 @@ bool shoppable(const World& w, const Household& h, uint32_t f, uint32_t good) {
     return !has_shop(h, f);
 }
 
+// Which input slot group `good` belongs to for `buyer`. A firm may buy the
+// same good for only one input, so the first match is the group.
+// Returns params::kMaxInputs when `good` is not an input of the firm's recipe.
+uint32_t input_slot_of(const World& w, const Firm& buyer, uint32_t good);
+
 bool buys_from(const Firm& f, uint32_t input, uint32_t seller) {
     const uint32_t base = input * params::kSuppliersPerInput;
     for (uint32_t s = 0; s < params::kSuppliersPerInput; ++s) {
         if (f.suppliers[base + s] == seller) return true;
     }
     return false;
+}
+
+uint32_t input_slot_of(const World& w, const Firm& buyer, uint32_t good) {
+    const Good& recipe = w.goods[buyer.good];
+    for (uint32_t i = 0; i < params::kMaxInputs; ++i) {
+        if (recipe.inputs[i] == good) return i;
+    }
+    return params::kMaxInputs;
+}
+
+// Shared PREDICATE for the two firm-side producer draws -- shared for the same
+// reason the household pair share `shoppable`, and with the same rule: only
+// the predicate is shared, never the draw.
+bool suppliable(const World& w, const Firm& buyer, uint32_t buyer_index, uint32_t f,
+                uint32_t good, uint32_t input) {
+    if (f == buyer_index) return false;
+    // `Firm::good` survives death, so a corpse would otherwise pass.
+    if (!w.firms[f].alive) return false;
+    if (w.firms[f].good != good) return false;
+    return !buys_from(buyer, input, f);
 }
 
 }  // namespace
@@ -109,35 +134,46 @@ uint32_t random_unconnected_firm(const World& w, uint32_t household, Rng& rng) {
 
 uint32_t random_unconnected_producer(const World& w, uint32_t firm, uint32_t good, Rng& rng) {
     const Firm& buyer = w.firms[firm];
-
-    // Which input slot group `good` belongs to. A firm may buy the same good
-    // for only one input, so the first match is the group.
-    uint32_t input = params::kMaxInputs;
-    const Good& recipe = w.goods[buyer.good];
-    for (uint32_t i = 0; i < params::kMaxInputs; ++i) {
-        if (recipe.inputs[i] == good) { input = i; break; }
-    }
+    const uint32_t input = input_slot_of(w, buyer, good);
     if (input == params::kMaxInputs) return NO_FIRM;
-
-    auto eligible = [&](uint32_t f) {
-        return f != firm && w.firms[f].alive && w.firms[f].good == good &&
-               !buys_from(buyer, input, f);
-    };
 
     double total_weight = 0.0;
     for (uint32_t f = 0; f < w.firms.size(); ++f) {
-        if (!eligible(f)) continue;
+        if (!suppliable(w, buyer, firm, f, good, input)) continue;
         total_weight += 1.0 + static_cast<double>(w.firms[f].employees.size());
     }
     if (total_weight <= 0.0) return NO_FIRM;
 
     double draw = rng.uniform(0.0, total_weight);
     for (uint32_t f = 0; f < w.firms.size(); ++f) {
-        if (!eligible(f)) continue;
+        if (!suppliable(w, buyer, firm, f, good, input)) continue;
         draw -= 1.0 + static_cast<double>(w.firms[f].employees.size());
         if (draw <= 0.0) return f;
     }
     return NO_FIRM;  // unreachable except for floating-point edge cases
+}
+
+// Flat draw. See the comment in network.hpp for why this one must not be
+// weighted: its callers apply no price test.
+uint32_t random_unconnected_producer_unweighted(const World& w, uint32_t firm, uint32_t good,
+                                                Rng& rng) {
+    const Firm& buyer = w.firms[firm];
+    const uint32_t input = input_slot_of(w, buyer, good);
+    if (input == params::kMaxInputs) return NO_FIRM;
+
+    uint32_t n = 0;
+    for (uint32_t f = 0; f < w.firms.size(); ++f) {
+        if (suppliable(w, buyer, firm, f, good, input)) ++n;
+    }
+    if (n == 0) return NO_FIRM;
+
+    uint32_t pick = rng.index(n);
+    for (uint32_t f = 0; f < w.firms.size(); ++f) {
+        if (!suppliable(w, buyer, firm, f, good, input)) continue;
+        if (pick == 0) return f;
+        --pick;
+    }
+    return NO_FIRM;  // unreachable
 }
 
 }  // namespace network

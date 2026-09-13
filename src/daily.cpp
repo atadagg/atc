@@ -174,10 +174,20 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
                 const uint32_t fi = view.links[slot];
                 if (fi == NO_FIRM) return std::numeric_limits<double>::infinity();
                 const Firm& s_f = w.firms[fi];
-                // A corpse, a firm with no price, or an empty shelf is not a
-                // candidate: it sorts behind every seller that can actually
-                // supply, and keeps its shuffled position among the rest.
-                if (!s_f.alive || s_f.price <= 0.0 || s_f.inventory <= 0.0) {
+                // A corpse or a firm with no price is not a candidate at
+                // all: it sorts behind every real seller and keeps its
+                // shuffled position among the rest.
+                //
+                // An EMPTY SHELF is deliberately NOT demoted. This model
+                // records demand as what was WANTED, not bought (CLAUDE.md),
+                // and that is exactly what makes a stocked-out firm expand.
+                // Sorting empty shelves to the back meant the visit loop
+                // stopped at the cheapest stocked seller and the hungry
+                // entrant was never visited, so it never recorded a want and
+                // never opened a vacancy. Rank on price among all live
+                // sellers; running out of stock is the seller's signal to
+                // hire, not a reason to be skipped.
+                if (!s_f.alive || s_f.price <= 0.0) {
                     return std::numeric_limits<double>::infinity();
                 }
                 return s_f.price;
