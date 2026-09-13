@@ -113,6 +113,7 @@ const char* reason_name(ledger::Reason r) {
         case ledger::Reason::Issuance: return "issuance";
         case ledger::Reason::InputPurchase: return "input_purchase";
         case ledger::Reason::Unspecified: break;
+        case ledger::Reason::Count: break;  // sentinel, never a real entry
     }
     return "unspecified";
 }

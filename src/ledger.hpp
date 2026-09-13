@@ -61,6 +61,11 @@ enum class Reason : uint8_t {
     Profit,    // firm -> household, the ownership proxy
     Issuance,  // issuer -> anyone: money entering circulation
     InputPurchase,  // firm -> firm, a daily input buy
+
+    // Sentinel, never a real reason: do not construct an Entry with it and do
+    // not tally it. It exists only so kReasonCount cannot drift behind the
+    // enum -- see the static_assert below.
+    Count,
 };
 
 // Wages and profits move at month close, outside any day.
@@ -79,7 +84,15 @@ struct Entry {
 // How many `Reason`s there are. `reason_index` is the tally slot for one, so a
 // widened `Reason` widens every total with it rather than leaving a new kind of
 // movement silently uncounted.
+//
+// Forgetting this bump used to be silent and nasty: `by_reason[6]` runs off the
+// end of the array straight into `in_by_kind[0]`, corrupting the very flow
+// check meant to catch it, with no compile error and no crash. The sentinel and
+// the assert turn that into a build failure.
 inline constexpr std::size_t kReasonCount = 6;
+static_assert(kReasonCount == static_cast<std::size_t>(Reason::Count),
+              "kReasonCount is out of step with Reason: a new reason was added "
+              "without widening the per-reason tallies.");
 
 constexpr std::size_t reason_index(Reason r) { return static_cast<std::size_t>(r); }
 

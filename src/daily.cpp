@@ -29,11 +29,16 @@ struct BuyerView {
     double daily_target;
     ledger::Account account;
 
-    // Where a firm's purchases land, and the month's remaining want they draw
-    // down. Both null for a household: its target is already a daily slice of
-    // planned_consumption and nothing stockpiles what it eats.
+    // Where a firm's purchases land. Null for a household: it consumes what
+    // it buys rather than stockpiling it.
+    //
+    // There is deliberately no pointer to the monthly want here. `input_demand`
+    // is the firm's analogue of `planned_consumption`: it is set at month open
+    // and stands unchanged for the whole month, and the daily slice is
+    // recomputed from it each day. Drawing it down as the firm bought made the
+    // slice decay geometrically -- a firm with unlimited supply and cash filled
+    // only ~64% of its monthly want.
     double* stock = nullptr;
-    double* demand = nullptr;
     ledger::Reason reason = ledger::Reason::Purchase;
 };
 
@@ -80,7 +85,6 @@ BuyerView view_of(World& w, Buyer b) {
                      f.input_demand[input] / params::kDaysPerMonth,
                      ledger::firm(b.index),
                      &f.input_stock[input],
-                     &f.input_demand[input],
                      ledger::Reason::InputPurchase};
 }
 
@@ -141,11 +145,8 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
             remaining -= bought;
 
             // A household consumes what it buys; a firm stockpiles it against
-            // the month's production and reduces what it still wants.
+            // the month's production.
             if (view.stock != nullptr) *view.stock += bought;
-            if (view.demand != nullptr) {
-                *view.demand = std::max(0.0, *view.demand - bought);
-            }
         }
 
         // Whatever this seller could not supply is its share of the shortfall.

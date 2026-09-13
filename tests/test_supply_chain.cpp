@@ -118,3 +118,71 @@ TEST_CASE("market::publish reconciles markets to goods") {
     CHECK(w.markets.size() == w.goods.size());
     CHECK(w.markets[2].has_reference == false);
 }
+
+TEST_CASE("a firm's monthly input want does not decay across the month") {
+    Rng rng(11);
+    World w = two_stage_world(rng);
+
+    // Both ore firms deeply stocked and cheap; the bread firm rich. Nothing
+    // but the daily slice itself can limit what firm 2 accumulates.
+    for (uint32_t f : {0u, 1u}) {
+        w.firms[f].inventory = 1e6;
+        w.firms[f].price = 1.0;
+    }
+    w.firms[2].suppliers[0] = 0;
+    w.firms[2].suppliers[1] = 1;
+    w.firms[2].liquidity = 1e6;
+
+    const double want = 21.0;
+    w.firms[2].input_demand[0] = want;
+
+    for (int day = 0; day < params::kDaysPerMonth; ++day) {
+        daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+    }
+
+    // input_demand is the firm's analogue of planned_consumption: it stands
+    // for the whole month and the daily slice is recomputed from it. Drawing
+    // it down instead made the slice decay geometrically and the firm filled
+    // only about 64% of its want.
+    CHECK(w.firms[2].input_demand[0] == doctest::Approx(want));
+    CHECK(w.firms[2].input_stock[0] == doctest::Approx(want));
+}
+
+TEST_CASE("run_day moves inputs from ore firms to bread firms") {
+    Rng rng(13);
+    World w = two_stage_world(rng);
+
+    for (uint32_t f : {0u, 1u}) {
+        w.firms[f].inventory = 1000.0;
+        w.firms[f].price = 1.0;
+    }
+    for (uint32_t f = 2; f < 5; ++f) {
+        w.firms[f].suppliers[0] = 0;
+        w.firms[f].suppliers[1] = 1;
+        w.firms[f].liquidity = 5000.0;
+        w.firms[f].input_demand[0] = 21.0;
+        w.firms[f].inventory = 1000.0;  // so households do not stock them out
+    }
+
+    const double ore_before = w.firms[0].inventory + w.firms[1].inventory;
+    const double cash_before = w.firms[0].liquidity + w.firms[1].liquidity;
+    // The fixture hands out cash by direct assignment, so the books do not sum
+    // to zero here; what must hold is that the day MOVES money without
+    // creating any.
+    const double books_before = w.books_balance();
+
+    daily::run_day(w, rng);
+
+    double stocked = 0.0;
+    for (uint32_t f = 2; f < 5; ++f) stocked += w.firms[f].input_stock[0];
+
+    CHECK(stocked > 0.0);
+    // Production adds to the ore firms' inventory too, so compare the sold
+    // quantity against what the bread firms took in.
+    CHECK(w.firms[0].liquidity + w.firms[1].liquidity > cash_before);
+    CHECK(ore_before - (w.firms[0].inventory + w.firms[1].inventory) +
+              w.params.productivity * static_cast<double>(w.firms[0].employees.size() +
+                                                          w.firms[1].employees.size()) ==
+          doctest::Approx(stocked));
+    CHECK(w.books_balance() == doctest::Approx(books_before));
+}

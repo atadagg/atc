@@ -34,10 +34,12 @@ bool has_shop(const Household& h, uint32_t firm) {
 
 namespace {
 
-// The good a household shops for. With one consumer good in the world this is
-// a constant; the loop exists so a second consumer good does not silently
-// break the filter. NO_GOOD means "no consumer good declared", in which case
-// the filter passes everything -- the pre-supply-chain behaviour.
+// The good a household shops for. This ASSUMES exactly one consumer good in
+// the world, which is what the supply chain currently builds; the first one
+// found wins, so a world with two consumer goods would route every household
+// to whichever has the lower index. Households choosing between consumer goods
+// is a later piece of work. NO_GOOD means "no consumer good declared", in
+// which case the filter passes everything -- the pre-supply-chain behaviour.
 uint32_t consumer_good(const World& w) {
     for (uint32_t g = 0; g < w.goods.size(); ++g) {
         if (w.goods[g].consumer) return g;
