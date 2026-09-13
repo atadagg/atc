@@ -89,6 +89,7 @@ void pull_toward_reference(Firm& f, const World& w) {
 void run_monthly(World& w, Rng& rng) {
     for (uint32_t i = 0; i < w.firms.size(); ++i) {
         Firm& f = w.firms[i];
+        if (!f.alive) continue;
         adjust_wage(f, w.params, rng);
         adjust_workforce(w, i, rng);
         adjust_price(f, w.params, rng);

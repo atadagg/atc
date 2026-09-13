@@ -50,6 +50,8 @@ uint32_t consumer_good(const World& w) {
 // Shared PREDICATE for the two household draws. Only the predicate is shared;
 // the draws themselves stay apart on purpose (one size-weighted, one flat).
 bool shoppable(const World& w, const Household& h, uint32_t f, uint32_t good) {
+    // A dead firm is still in the array (invariant 3) but is not a shop.
+    if (!w.firms[f].alive) return false;
     if (good != NO_GOOD && w.firms[f].good != good) return false;
     return !has_shop(h, f);
 }
@@ -118,7 +120,8 @@ uint32_t random_unconnected_producer(const World& w, uint32_t firm, uint32_t goo
     if (input == params::kMaxInputs) return NO_FIRM;
 
     auto eligible = [&](uint32_t f) {
-        return f != firm && w.firms[f].good == good && !buys_from(buyer, input, f);
+        return f != firm && w.firms[f].alive && w.firms[f].good == good &&
+               !buys_from(buyer, input, f);
     };
 
     double total_weight = 0.0;

@@ -63,6 +63,8 @@ enum class Reason : uint8_t {
     // firm -> firm, paying last month's input bills. Input purchases
     // themselves move no money: they create a payable, settled here.
     TradeCreditSettlement,
+    // dying firm -> creditors, then the issuer. See firm_lifecycle.
+    FirmLiquidation,
 
     // Sentinel, never a real reason: do not construct an Entry with it and do
     // not tally it. It exists only so kReasonCount cannot drift behind the
@@ -91,7 +93,7 @@ struct Entry {
 // end of the array straight into `in_by_kind[0]`, corrupting the very flow
 // check meant to catch it, with no compile error and no crash. The sentinel and
 // the assert turn that into a build failure.
-inline constexpr std::size_t kReasonCount = 6;
+inline constexpr std::size_t kReasonCount = 7;
 static_assert(kReasonCount == static_cast<std::size_t>(Reason::Count),
               "kReasonCount is out of step with Reason: a new reason was added "
               "without widening the per-reason tallies.");

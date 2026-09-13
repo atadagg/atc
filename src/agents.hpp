@@ -12,6 +12,11 @@ inline constexpr uint32_t NO_HOUSEHOLD = 0xFFFFFFFFu;
 // Plain aggregate. No virtuals, no inheritance. Cross-agent references are
 // indices, never pointers.
 struct Firm {
+    // A dead firm is left in place rather than erased: every cross-agent
+    // reference is an index (invariant 3), and erasing would invalidate every
+    // index above it. Dead firms are skipped, not removed.
+    bool alive = true;
+
     double liquidity = params::kInitialFirmLiquidity;
     double inventory = params::kInitialInventory;
     double price = params::kInitialPrice;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <numeric>
 #include <vector>
@@ -158,6 +159,14 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
 
         const double wanted = remaining;
 
+        // A dead seller supplies nothing and hears nothing: the want is not
+        // recorded against its demand series, but it IS booked as this slot's
+        // shortfall, so the buyer rewires away from the corpse next month.
+        if (!f.alive) {
+            view.unsatisfied[slot] += wanted;
+            continue;
+        }
+
         // The firm learns what was wanted, whether or not it can supply it.
         f.demand_this_month += wanted;
 
@@ -251,6 +260,7 @@ void shop(World& w, uint32_t household, Rng& rng, ledger::Journal* journal) {
 
 void produce(World& w) {
     for (Firm& f : w.firms) {
+        if (!f.alive) continue;
         const Good& g = w.goods[f.good];
 
         double by_labour = w.params.productivity * static_cast<double>(f.employees.size());
@@ -288,7 +298,15 @@ void produce(World& w) {
         const double unit_cost = limit > 0.0 ? batch_cost / limit : 0.0;
         const double total = f.inventory + limit;
         if (total > 0.0) {
-            f.output_cost_basis = (f.inventory * f.output_cost_basis + limit * unit_cost) / total;
+            const double basis =
+                (f.inventory * f.output_cost_basis + limit * unit_cost) / total;
+            // A poisoned basis is worse than a stale one. With zero inventory,
+            // a positive wage bill and an input stock at denormal scale,
+            // `unit_cost` overflows to +inf and `inventory * output_cost_basis`
+            // then becomes NaN -- and `NaN < 0.0` is false, so `insolvent()`
+            // would answer "no" forever. The basis is a kill decision now, so
+            // an infinite or NaN update is discarded rather than stored.
+            if (std::isfinite(basis)) f.output_cost_basis = basis;
         }
 
         f.inventory += limit;
@@ -312,6 +330,7 @@ void run_day(World& w, Rng& rng, ledger::Journal* journal) {
         rng.shuffle(forder);
 
         for (uint32_t fi : forder) {
+            if (!w.firms[fi].alive) continue;
             const Good& recipe = w.goods[w.firms[fi].good];
             for (uint32_t i = 0; i < params::kMaxInputs; ++i) {
                 if (recipe.inputs[i] == NO_GOOD) continue;

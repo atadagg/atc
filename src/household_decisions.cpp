@@ -78,6 +78,7 @@ void search_job(World& w, uint32_t household, Rng& rng) {
 
     for (uint32_t v = 0; v < visits; ++v) {
         uint32_t candidate = rng.index(static_cast<uint32_t>(w.firms.size()));
+        if (!w.firms[candidate].alive) continue;
         if (!w.firms[candidate].has_open_vacancy) continue;
         if (candidate == h.employer) continue;
 

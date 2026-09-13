@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "firm_lifecycle.hpp"
 #include "ledger.hpp"
 #include "network.hpp"
 #include "rng.hpp"
@@ -50,6 +51,7 @@ void settle_trade_credit(World& w, Rng& rng, ledger::Journal* journal) {
     // determinism, not an optimisation.
     std::vector<uint32_t> debtors;
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
+        if (!w.firms[fi].alive) continue;
         if (w.firms[fi].payables > 0.0) debtors.push_back(fi);
     }
     if (debtors.empty()) return;
@@ -113,6 +115,7 @@ void settle_trade_credit(World& w, Rng& rng, ledger::Journal* journal) {
 void pay_wages(World& w, ledger::Journal* journal) {
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
         Firm& f = w.firms[fi];
+        if (!f.alive) continue;
         double headcount = static_cast<double>(f.employees.size());
         if (headcount == 0.0) continue;
 
@@ -178,6 +181,7 @@ void distribute_profits(World& w, ledger::Journal* journal) {
 
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
         Firm& f = w.firms[fi];
+        if (!f.alive) continue;
         double wage_bill = f.wage * static_cast<double>(f.employees.size());
         double buffer = w.params.buffer_factor * wage_bill;
         double profit = f.liquidity - buffer;
@@ -258,6 +262,12 @@ void run(World& w, Rng& rng, ledger::Journal* journal) {
     distribute_profits(w, journal);
     update_reservation_wages(w);
     apply_pending_fires(w);
+    // Position matters. `output_cost_basis` books labour the firm has not yet
+    // paid and there is no matching accrued-wages liability, so equity is
+    // overstated mid-month and steps down when wages leave. After
+    // `settle_trade_credit` and `pay_wages` is the point of least distortion:
+    // the supply bills and the payroll have both landed.
+    firm_lifecycle::run_deaths(w, rng, journal);
     roll_demand(w);
 }
 
