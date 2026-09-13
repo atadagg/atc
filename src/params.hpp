@@ -26,6 +26,12 @@ inline constexpr uint32_t kNumHouseholds = 1000;
 inline constexpr uint32_t kNumFirms = 100;
 inline constexpr uint32_t kShopsPerHousehold = 7;
 
+// Recipe and supplier-link capacity. Structural for the same reason as
+// kShopsPerHousehold: these size fixed arrays inside Good and Firm, and a
+// runtime size would stop agents being trivially copyable.
+inline constexpr uint32_t kMaxInputs = 3;
+inline constexpr uint32_t kSuppliersPerInput = 3;
+
 // =====================================================================
 // INITIAL CONDITIONS — compile-time, and structural in the same sense.
 //

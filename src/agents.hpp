@@ -17,6 +17,9 @@ struct Firm {
     double price = params::kInitialPrice;
     double wage = params::kInitialWage;
 
+    // Which good this firm makes. A firm makes exactly one.
+    uint32_t good = 0;
+
     // Demand encountered this month, and last month's total (drives all rules).
     double demand_this_month = 0.0;
     double demand_last_month = 0.0;

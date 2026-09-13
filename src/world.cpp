@@ -18,6 +18,17 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     // an ordinary balanced transfer rather than an exception to invariant 1.
     issuers.assign(1, 0.0);
 
+    // Create the single consumer good that represents today's economy in the
+    // new vocabulary.
+    Good consumer;
+    consumer.inputs.fill(NO_GOOD);
+    consumer.input_qty.fill(0.0);
+    consumer.labour_per_unit = 1.0;
+    consumer.consumer = true;
+    consumer.remove = 0;
+    consumer.commoditization = 0.0;
+    goods.push_back(consumer);
+
     firms.resize(n_firms);
     households.resize(n_households);
 

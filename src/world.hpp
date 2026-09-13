@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "agents.hpp"
+#include "goods.hpp"
 #include "params.hpp"
 #include "rng.hpp"
 
@@ -16,6 +17,11 @@ public:
 
     std::vector<Firm> firms;
     std::vector<Household> households;
+
+    // The production graph. A fresh World holds exactly one consumer good
+    // made from labour alone -- which is the economy as it was before goods
+    // existed, expressed in the new vocabulary rather than special-cased.
+    std::vector<Good> goods;
 
     // Accounts that are allowed to go negative. An issuer's negative balance
     // is not a deficit: it is the money it has issued.

@@ -64,6 +64,7 @@ add_executable(atc_tests
     tests/test_month_close.cpp
     tests/test_scheduler.cpp
     tests/test_golden_run.cpp
+    tests/test_goods.cpp
     tests/test_recorder.cpp
     tests/test_identity.cpp
     tests/test_identity_names.cpp
