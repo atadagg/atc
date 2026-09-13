@@ -267,3 +267,56 @@ TEST_CASE("inventory exactly at upper band edge does not adjust price") {
 
     CHECK(f.price == doctest::Approx(5.0));
 }
+
+TEST_CASE("at commoditization 0 the price rule is untouched by the reference") {
+    Rng rng(3);
+    World w(20, 5, rng);
+    w.goods[0].commoditization = 0.0;
+    w.markets[0].reference_price = 99.0;
+    w.markets[0].has_reference = true;
+
+    for (Firm& f : w.firms) f.price = 1.0;
+    World before = w;
+
+    firm_decisions::adjust_price(w, rng);
+
+    Rng rng2(3);
+    World w2 = before;
+    w2.markets[0].has_reference = false;  // no reference at all
+    firm_decisions::adjust_price(w2, rng2);
+
+    for (std::size_t i = 0; i < w.firms.size(); ++i) {
+        CHECK(w.firms[i].price == doctest::Approx(w2.firms[i].price));
+    }
+}
+
+TEST_CASE("at commoditization 1 the firm is a price taker") {
+    Rng rng(3);
+    World w(20, 5, rng);
+    w.goods[0].commoditization = 1.0;
+    w.markets[0].reference_price = 5.0;
+    w.markets[0].has_reference = true;
+    for (Firm& f : w.firms) f.price = 1.0;
+
+    firm_decisions::adjust_price(w, rng);
+
+    for (const Firm& f : w.firms) CHECK(f.price == doctest::Approx(5.0));
+}
+
+TEST_CASE("partial commoditization moves the price part of the way") {
+    Rng rng(3);
+    World w(20, 5, rng);
+    w.goods[0].commoditization = 0.5;
+    w.markets[0].reference_price = 3.0;
+    w.markets[0].has_reference = true;
+    for (Firm& f : w.firms) f.price = 1.0;
+
+    firm_decisions::adjust_price(w, rng);
+
+    // Whatever the firm's own rule decided, the result sits strictly between
+    // that and the reference -- the pull is a blend, never a jump.
+    for (const Firm& f : w.firms) {
+        CHECK(f.price > 1.0);
+        CHECK(f.price < 3.0);
+    }
+}

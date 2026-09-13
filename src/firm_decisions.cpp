@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "goods.hpp"
+#include "market.hpp"
 #include "network.hpp"
 #include "params.hpp"
 #include "world.hpp"
@@ -76,11 +78,42 @@ void adjust_price(Firm& f, const Params& p, Rng& rng) {
     }
 }
 
+namespace {
+
+// The commoditization pull. The firm's own gated rule above (raise only
+// while below the cap, lower only while above the floor -- see CLAUDE.md, it
+// is gated rather than clamped) decides what the firm WANTS. This blends
+// that toward what the good actually trades at, weighted by how far the good
+// sits from the consumer.
+//
+// At 0 this is the identity and today's economy is untouched. At 1 the firm
+// is a pure price taker: iron ore sells at the iron ore price whatever its
+// producer would prefer. Nothing here is an auctioneer -- the reference is
+// last month's realised average, and a firm at the reference price can still
+// fail to sell.
+void pull_toward_reference(Firm& f, const Good& g, const market::GoodMarket& m) {
+    if (m.has_reference && g.commoditization > 0.0) {
+        f.price = f.price + g.commoditization * (m.reference_price - f.price);
+    }
+}
+
+}  // namespace
+
+void adjust_price(World& w, Rng& rng) {
+    for (uint32_t i = 0; i < w.firms.size(); ++i) {
+        Firm& f = w.firms[i];
+        adjust_price(f, w.params, rng);
+        pull_toward_reference(f, w.goods[f.good], w.markets[f.good]);
+    }
+}
+
 void run_monthly(World& w, Rng& rng) {
     for (uint32_t i = 0; i < w.firms.size(); ++i) {
-        adjust_wage(w.firms[i], w.params, rng);
+        Firm& f = w.firms[i];
+        adjust_wage(f, w.params, rng);
         adjust_workforce(w, i, rng);
-        adjust_price(w.firms[i], w.params, rng);
+        adjust_price(f, w.params, rng);
+        pull_toward_reference(f, w.goods[f.good], w.markets[f.good]);
     }
 }
 

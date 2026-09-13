@@ -28,6 +28,12 @@ void adjust_wage(Firm& f, const Params& p, Rng& rng);
 void adjust_workforce(World& w, uint32_t firm, Rng& rng);
 void adjust_price(Firm& f, const Params& p, Rng& rng);
 
+// World-level overload: runs the gated rule above for every firm, then pulls
+// each firm's price toward its good's published reference, weighted by the
+// good's commoditization. At commoditization 0 (or with no reference yet)
+// this is the identity on top of the per-firm rule.
+void adjust_price(World& w, Rng& rng);
+
 // Runs the three rules above for every firm, in index order.
 void run_monthly(World& w, Rng& rng);
 
