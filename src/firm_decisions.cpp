@@ -1,5 +1,7 @@
 #include "firm_decisions.hpp"
 
+#include "daily.hpp"
+
 #include <algorithm>
 
 #include "goods.hpp"
@@ -127,7 +129,21 @@ void rewire_suppliers(World& w, Rng& rng) {
                 const uint32_t slot = base + k;
                 const bool empty_slot = f.suppliers[slot] == NO_FIRM;
                 const bool rationed = f.input_unsatisfied[slot] > 0.0;
-                if (!empty_slot && !rationed) continue;
+                if (!empty_slot && !rationed) {
+                    // Commoditization channel three: a buyer of a commodity
+                    // shops around even when it was served, a bespoke buyer
+                    // does not. Without this the only way a supplier link
+                    // ever moves is rationing, so a newly founded firm with
+                    // no customers is never discovered by anyone.
+                    //
+                    // The draw is taken ONLY when the probability is
+                    // positive. At commoditization 0 -- the whole of the
+                    // legacy single-good world -- no randomness is consumed
+                    // and this is exactly the old `continue` (invariant 2).
+                    const double p = daily::switch_probability(w, g.inputs[s]);
+                    if (!(p > 0.0)) continue;
+                    if (!rng.chance(p)) continue;
+                }
 
                 uint32_t replacement =
                     network::random_unconnected_producer(w, i, g.inputs[s], rng);

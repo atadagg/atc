@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -123,6 +124,20 @@ BuyerView view_of(World& w, Buyer b) {
 
 }  // namespace
 
+uint32_t sellers_compared(const World& w, uint32_t good) {
+    if (good >= w.goods.size()) return 1u;
+    const double c = w.goods[good].commoditization;
+    const double extra = std::floor(c * static_cast<double>(params::kSuppliersPerInput - 1));
+    if (!(extra > 0.0)) return 1u;  // also catches NaN
+    uint32_t n = 1u + static_cast<uint32_t>(extra);
+    return std::min(n, static_cast<uint32_t>(params::kSuppliersPerInput));
+}
+
+double switch_probability(const World& w, uint32_t good) {
+    if (good >= w.goods.size()) return 0.0;
+    return w.goods[good].commoditization;
+}
+
 void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
     BuyerView view = view_of(w, b);
     if (view.link_count == 0) return;
@@ -141,6 +156,35 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
     for (std::size_t i = view.link_count - 1; i > 0; --i) {
         uint32_t j = rng.index(static_cast<uint32_t>(i + 1));
         std::swap(order[i], order[j]);
+    }
+
+    // Commoditization channel two: a buyer of a commodity input compares
+    // several sellers and takes the CHEAPEST with stock instead of the first
+    // it happens to visit. Only the first `compared` entries of the already
+    // shuffled order are reordered, so which sellers are in the comparison
+    // set is still random -- only the pick within the set is deliberate.
+    //
+    // No randomness is consumed here in either case, and at commoditization 0
+    // `compared` is 1 and the block is a no-op, so the single-good world's
+    // draw sequence and visit order are untouched (invariant 2).
+    if (view.buyer_firm != nullptr) {
+        const uint32_t compared = std::min(sellers_compared(w, b.good), view.link_count);
+        if (compared > 1) {
+            auto key = [&](uint32_t slot) {
+                const uint32_t fi = view.links[slot];
+                if (fi == NO_FIRM) return std::numeric_limits<double>::infinity();
+                const Firm& s_f = w.firms[fi];
+                // A corpse, a firm with no price, or an empty shelf is not a
+                // candidate: it sorts behind every seller that can actually
+                // supply, and keeps its shuffled position among the rest.
+                if (!s_f.alive || s_f.price <= 0.0 || s_f.inventory <= 0.0) {
+                    return std::numeric_limits<double>::infinity();
+                }
+                return s_f.price;
+            };
+            std::stable_sort(order.begin(), order.begin() + compared,
+                             [&](uint32_t a, uint32_t c) { return key(a) < key(c); });
+        }
     }
 
     // The paper's n is a *behavioural* parameter but the visit order lives in

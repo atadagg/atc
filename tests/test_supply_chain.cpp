@@ -426,3 +426,33 @@ TEST_CASE("a firm with no material inputs draws nothing when rewiring") {
     Rng b(77);
     CHECK(a.uniform(0.0, 1.0) == doctest::Approx(b.uniform(0.0, 1.0)));
 }
+
+TEST_CASE("a commodity buyer compares more sellers than a bespoke one") {
+    Rng rng(8);
+    World w = two_stage_world(rng);
+
+    // Both goods, same buyer state, different commoditization.
+    CHECK(daily::sellers_compared(w, 0) > daily::sellers_compared(w, 1));
+
+    // The consumer good sits at commoditization 0 and must compare exactly
+    // what the existing rule compares -- no more, no less, or the single-good
+    // world changes.
+    CHECK(daily::sellers_compared(w, 1) == 1u);
+}
+
+TEST_CASE("a commodity link is abandoned more readily than a bespoke one") {
+    Rng rng(8);
+    World w = two_stage_world(rng);
+
+    // Stickiness is the inverse of commoditization: ore (upstream, fungible)
+    // is switched away from freely; the consumer good is not.
+    CHECK(daily::switch_probability(w, 0) > daily::switch_probability(w, 1));
+    CHECK(daily::switch_probability(w, 1) == doctest::Approx(0.0));
+}
+
+TEST_CASE("at commoditization 0 the single-good world is untouched") {
+    Rng rng(8);
+    World w(20, 4, rng);
+    CHECK(daily::sellers_compared(w, 0) == 1u);
+    CHECK(daily::switch_probability(w, 0) == doctest::Approx(0.0));
+}
