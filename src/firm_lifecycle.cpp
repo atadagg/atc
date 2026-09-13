@@ -226,26 +226,33 @@ void run_entry(World& w, Rng& rng, ledger::Journal* journal) {
     double wage;
     if (!prevailing_wage(w, wage)) return;  // no living firm to read a wage from
 
+    // Bounds this whole call, not just one good: one price shock must not be
+    // able to spawn a whole new sector in a single month. Checked at the top
+    // of the loop, so a good that would push past the cap is skipped -- and
+    // draws no randomness -- rather than counted and then undone.
+    uint32_t founded_this_month = 0;
+
     for (uint32_t g = 0; g < w.goods.size(); ++g) {
-        // Producers are "scarce" for a good when fewer of the firms ever
-        // assigned to it are still alive than were assigned in the first
-        // place -- i.e. a firm that used to make this good has died and left
-        // a vacancy. `Firm::good` never changes once set, even in death (see
-        // liquidate(), which zeroes a corpse's books but not its good), so
-        // this count is stable across the whole run.
-        //
-        // A good nobody has ever been assigned to (total == 0, e.g. a good
-        // added to the graph but never populated) is deliberately NOT
-        // treated as scarce: entry here replaces a dead incumbent, it does
-        // not seed a producer for a good that never had one.
-        uint32_t total = 0;
+        if (founded_this_month >= w.params.firm_entry_max_per_month) break;
+
+        // Living producers only. `Firm::good` survives death (liquidate()
+        // zeroes a corpse's books but not its good), so counting dead firms
+        // here was measured to never close: founding a replacement raises
+        // both "how many ever made this" and "how many are alive" together,
+        // and a good that had never been produced could never attract a
+        // first producer at all (0 < 0 is false). Neither problem exists once
+        // corpses are simply not counted.
         uint32_t living = 0;
         for (const Firm& f : w.firms) {
-            if (f.good != g) continue;
-            ++total;
-            if (f.alive) ++living;
+            if (f.good == g && f.alive) ++living;
         }
-        if (living >= total) continue;
+
+        // Scarcity is a price fact, not a headcount: the margin test below
+        // already says this good pays above what it costs to make, which is
+        // exactly what a shortage looks like from inside a model where
+        // nobody forecasts. The count here only bounds how far one good may
+        // crowd out the rest of the economy.
+        if (living >= w.params.firm_entry_max_per_good) continue;
 
         const market::GoodMarket& m = w.markets[g];
         if (!m.has_reference) continue;
@@ -282,6 +289,7 @@ void run_entry(World& w, Rng& rng, ledger::Journal* journal) {
         ledger::transfer(w, ledger::issuer(kIssuer), ledger::firm(index),
                          w.params.firm_entry_capital, ledger::Reason::FirmFounding,
                          journal);
+        ++founded_this_month;
     }
 }
 

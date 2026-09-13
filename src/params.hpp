@@ -126,4 +126,12 @@ struct Params {
     double firm_entry_prob = 0.0;
     double firm_entry_margin = 1.2;     // reference price must exceed cost by this
     double firm_entry_capital = 100.0;  // cash a founded firm starts with
+    // Ceiling on LIVING producers of one good, not on firms ever assigned to
+    // it -- a corpse must not count, and a replacement must not be blocked
+    // forever by the incumbent it replaces. This is what lets the ceiling
+    // reopen as firms die rather than only ratchet upward.
+    double firm_entry_max_per_good = 8.0;
+    // Ceiling on how many firms may be founded across ALL goods in one
+    // month, so one price shock cannot spawn a whole new sector at once.
+    double firm_entry_max_per_month = 5.0;
 };

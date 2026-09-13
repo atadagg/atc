@@ -29,17 +29,26 @@ Metrics compute_metrics(const World& w, int month) {
 
     double price_sum = 0.0;
     double wage_sum = 0.0;
+    uint32_t living_firms = 0;
     for (const auto& f : w.firms) {
-        price_sum += f.price;
-        wage_sum += f.wage;
         if (f.has_open_vacancy) ++m.vacancies;
         // month_close::roll_demand ran last, so demand_last_month is the
         // demand faced during the month just closed.
         m.demand += f.demand_last_month;
         m.inventory += f.inventory;
+        // A dead firm's price and wage are stale, not zero -- liquidate()
+        // clears its books but leaves them standing. With firm entry able to
+        // grow w.firms.size() without bound, dividing by the full array
+        // pulls both means toward whatever a graveyard of corpses last
+        // charged and paid, exactly the "mean wage of 16 was 67 dead firms at
+        // zero" trap. Only the living have a price or a wage to average.
+        if (!f.alive) continue;
+        price_sum += f.price;
+        wage_sum += f.wage;
+        ++living_firms;
     }
-    m.mean_price = price_sum / static_cast<double>(w.firms.size());
-    m.mean_wage = wage_sum / static_cast<double>(w.firms.size());
+    m.mean_price = living_firms > 0 ? price_sum / static_cast<double>(living_firms) : 0.0;
+    m.mean_wage = living_firms > 0 ? wage_sum / static_cast<double>(living_firms) : 0.0;
 
     // Gini of household liquidity, on the sorted distribution.
     std::vector<double> x;

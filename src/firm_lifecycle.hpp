@@ -35,8 +35,16 @@ void liquidate(World& w, uint32_t firm, ledger::Journal* journal = nullptr);
 void run_deaths(World& w, Rng& rng, ledger::Journal* journal = nullptr);
 
 // Firm entry: the other half of the lifecycle. A good whose reference price
-// pays well above what it costs to make, and that has fewer living producers
-// than it once did, attracts a new entrant.
+// pays well above what it costs to make attracts a new entrant, up to
+// `Params::firm_entry_max_per_good` LIVING producers of that good and
+// `Params::firm_entry_max_per_month` new firms across all goods combined.
+//
+// The gate is a living headcount, not "fewer than were ever assigned to this
+// good" -- `Firm::good` survives death, so counting corpses either blocks a
+// good from ever attracting its first producer (0 assigned == 0 dead) or, for
+// a good that has lost one, never closes at all, since founding a
+// replacement raises the corpse-inclusive count too. Both were measured, not
+// merely suspected.
 //
 // Returns immediately -- before touching `rng` at all -- when
 // `Params::firm_entry_prob` is <= 0.0. That is what keeps the legacy

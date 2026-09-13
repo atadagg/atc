@@ -50,6 +50,12 @@ constexpr ParamSpec kSpecs[] = {
     spec<&Params::demand_satisfied_fraction>("demand_satisfied_fraction", 0.0, kProb),
     spec<&Params::max_emergency_wage_cut>("max_emergency_wage_cut", 0.0, kProb),
     spec<&Params::min_wage>("min_wage", 0.0, 1000.0),
+    spec<&Params::commoditization_k>("commoditization_k", 0.0, 10.0),
+    spec<&Params::firm_entry_prob>("firm_entry_prob", 0.0, kProb),
+    spec<&Params::firm_entry_margin>("firm_entry_margin", 0.0, 10.0),
+    spec<&Params::firm_entry_capital>("firm_entry_capital", 0.0, 100000.0),
+    spec<&Params::firm_entry_max_per_good>("firm_entry_max_per_good", 0.0, 1000.0),
+    spec<&Params::firm_entry_max_per_month>("firm_entry_max_per_month", 0.0, 1000.0),
 };
 
 }  // namespace

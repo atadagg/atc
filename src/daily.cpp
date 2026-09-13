@@ -263,7 +263,11 @@ void produce(World& w) {
         if (!f.alive) continue;
         const Good& g = w.goods[f.good];
 
-        double by_labour = w.params.productivity * static_cast<double>(f.employees.size());
+        // labour_per_unit scales how much labour one unit of this good takes;
+        // every good today is 1.0, so this divide is exact under IEEE-754 and
+        // changes nothing about the legacy single-good run.
+        double by_labour = w.params.productivity * static_cast<double>(f.employees.size()) /
+                            g.labour_per_unit;
 
         // Leontief: no substitution between inputs. Short of iron, extra
         // fibre does not help. That is exactly what makes a stockout travel

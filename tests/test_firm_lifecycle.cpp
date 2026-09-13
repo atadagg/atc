@@ -169,3 +169,81 @@ TEST_CASE("no entry when the price does not cover cost") {
     firm_lifecycle::run_entry(w, rng);
     CHECK(w.firms.size() == before);
 }
+
+TEST_CASE("a never-produced good with a reference price can attract a first producer") {
+    Rng rng(4);
+    World w(30, 4, rng);  // every firm makes good 0
+
+    // A second good nobody has ever been assigned to -- the count of firms
+    // ever assigned to it is 0, and 0 living producers is not scarce under
+    // the old (dropped) "fewer than were ever assigned" rule, which would
+    // have refused this forever. Under the cap rule, 0 living is simply below
+    // the cap.
+    Good g;
+    g.inputs.fill(NO_GOOD);
+    g.input_qty.fill(0.0);
+    g.labour_per_unit = 1.0;
+    w.goods.push_back(g);
+    w.markets.resize(w.goods.size());
+    w.markets[1].reference_price = 100.0;
+    w.markets[1].has_reference = true;
+
+    w.params.firm_entry_prob = 1.0;
+
+    std::size_t before = w.firms.size();
+    firm_lifecycle::run_entry(w, rng);
+
+    CHECK(w.firms.size() > before);
+    CHECK(w.firms.back().good == 1u);
+}
+
+TEST_CASE("a profitable sector with no deaths grows to the cap and then stops") {
+    Rng rng(4);
+    World w(30, 4, rng);  // 4 firms, all alive, all making good 0
+    w.params.firm_entry_prob = 1.0;
+    w.params.firm_entry_max_per_good = 6.0;
+    w.params.firm_entry_max_per_month = 10.0;  // not the constraint under test
+    w.markets[0].reference_price = 100.0;
+    w.markets[0].has_reference = true;
+
+    // Nobody dies; entry alone must grow the sector from 4 living producers
+    // to the cap of 6, then stop drawing new ones even though the good stays
+    // just as profitable every month after.
+    for (int month = 0; month < 10; ++month) {
+        firm_lifecycle::run_entry(w, rng);
+    }
+
+    uint32_t living = 0;
+    for (const Firm& f : w.firms) {
+        if (f.alive) ++living;
+    }
+    CHECK(living == 6u);
+}
+
+TEST_CASE("entry does not exceed the per-month cap across goods") {
+    Rng rng(4);
+    World w(30, 6, rng);
+    w.goods.resize(3);
+    for (Good& g : w.goods) {
+        g.inputs.fill(NO_GOOD);
+        g.input_qty.fill(0.0);
+        g.labour_per_unit = 1.0;
+    }
+    w.markets.resize(w.goods.size());
+    for (uint32_t g = 0; g < 3; ++g) {
+        w.markets[g].reference_price = 100.0;
+        w.markets[g].has_reference = true;
+    }
+    // One firm per good: every good is well below its per-good cap, so all
+    // three would attract an entrant this month if nothing else stopped them.
+    for (uint32_t i = 0; i < 6; ++i) w.firms[i].good = i % 3;
+
+    w.params.firm_entry_prob = 1.0;
+    w.params.firm_entry_max_per_good = 8.0;
+    w.params.firm_entry_max_per_month = 2.0;
+
+    std::size_t before = w.firms.size();
+    firm_lifecycle::run_entry(w, rng);
+
+    CHECK(w.firms.size() == before + 2);
+}
