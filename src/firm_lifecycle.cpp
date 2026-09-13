@@ -6,7 +6,9 @@
 
 #include "agents.hpp"
 #include "balance_sheet.hpp"
+#include "goods.hpp"
 #include "ledger.hpp"
+#include "market.hpp"
 #include "network.hpp"
 #include "params.hpp"
 #include "rng.hpp"
@@ -16,7 +18,8 @@ namespace firm_lifecycle {
 
 namespace {
 
-// Where a dying firm's unclaimed cash goes. One issuer exists today.
+// Where a dying firm's unclaimed cash goes, and where a founding firm's
+// opening capital comes from. One issuer exists today.
 constexpr uint32_t kIssuer = 0;
 
 }  // namespace
@@ -167,6 +170,118 @@ void run_deaths(World& w, Rng& rng, ledger::Journal* journal) {
             killed = true;
         }
         if (!killed) return;
+    }
+}
+
+namespace {
+
+// The economy-wide average wage among living firms, standing in for the wage
+// an as-yet-nonexistent firm would pay. No living firm means no wage signal
+// to cost a new one against, so entry cannot proceed at all -- that case is
+// handled by the caller returning false and declining every good this call.
+bool prevailing_wage(const World& w, double& out) {
+    double sum = 0.0;
+    uint32_t count = 0;
+    for (const Firm& f : w.firms) {
+        if (!f.alive) continue;
+        sum += f.wage;
+        ++count;
+    }
+    if (count == 0) return false;
+    out = sum / static_cast<double>(count);
+    return true;
+}
+
+// Labour at `wage`, scaled by the recipe's labour_per_unit exactly the way
+// firm_decisions::marginal_cost scales it by 1 (today's only good has
+// labour_per_unit == 1, so the two formulas agree on the legacy economy),
+// plus each input at its published reference price.
+//
+// Returns false -- decline to cost -- the moment an input has no published
+// reference price. A firm cannot be founded against a price that does not
+// exist yet; declining is the safe answer, not an approximation of one.
+bool unit_cost(const World& w, uint32_t good, double wage, double& out) {
+    const Good& g = w.goods[good];
+    double cost = g.labour_per_unit * wage / (w.params.productivity * params::kDaysPerMonth);
+    for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+        if (g.inputs[s] == NO_GOOD) continue;
+        if (g.input_qty[s] <= 0.0) continue;
+        const market::GoodMarket& m = w.markets[g.inputs[s]];
+        if (!m.has_reference) return false;
+        cost += g.input_qty[s] * m.reference_price;
+    }
+    out = cost;
+    return true;
+}
+
+}  // namespace
+
+void run_entry(World& w, Rng& rng, ledger::Journal* journal) {
+    // Off by default, and this check runs before any draw at all: a world
+    // that never raises firm_entry_prob takes exactly the RNG draws it always
+    // took, so every existing golden run is untouched by this feature merely
+    // existing.
+    if (w.params.firm_entry_prob <= 0.0) return;
+
+    double wage;
+    if (!prevailing_wage(w, wage)) return;  // no living firm to read a wage from
+
+    for (uint32_t g = 0; g < w.goods.size(); ++g) {
+        // Producers are "scarce" for a good when fewer of the firms ever
+        // assigned to it are still alive than were assigned in the first
+        // place -- i.e. a firm that used to make this good has died and left
+        // a vacancy. `Firm::good` never changes once set, even in death (see
+        // liquidate(), which zeroes a corpse's books but not its good), so
+        // this count is stable across the whole run.
+        //
+        // A good nobody has ever been assigned to (total == 0, e.g. a good
+        // added to the graph but never populated) is deliberately NOT
+        // treated as scarce: entry here replaces a dead incumbent, it does
+        // not seed a producer for a good that never had one.
+        uint32_t total = 0;
+        uint32_t living = 0;
+        for (const Firm& f : w.firms) {
+            if (f.good != g) continue;
+            ++total;
+            if (f.alive) ++living;
+        }
+        if (living >= total) continue;
+
+        const market::GoodMarket& m = w.markets[g];
+        if (!m.has_reference) continue;
+
+        double cost;
+        if (!unit_cost(w, g, wage, cost)) continue;
+        if (m.reference_price <= cost * w.params.firm_entry_margin) continue;
+
+        if (!rng.chance(w.params.firm_entry_prob)) continue;
+
+        Firm nf;
+        nf.alive = true;
+        nf.good = g;
+        nf.price = m.reference_price;
+        nf.wage = wage;
+        nf.suppliers.fill(NO_FIRM);
+        nf.payable_to.fill(NO_FIRM);
+        // Every other array (input stock/demand/unsatisfied, cost bases,
+        // payable amounts) and every other scalar (inventory, payables,
+        // receivables, demand history, vacancy/fire bookkeeping) is already
+        // zero or its Firm default -- see agents.hpp.
+
+        // Appending may reallocate w.firms, so the index -- not a reference
+        // -- is what the funding transfer below addresses.
+        const uint32_t index = static_cast<uint32_t>(w.firms.size());
+        w.firms.push_back(nf);
+
+        // PLACEHOLDER until piece 2, symmetric with liquidate()'s residual
+        // cash going to the issuer above: a founder's opening capital should
+        // come from shareholders buying equity, and shareholders do not
+        // exist yet. Routing it through the issuer keeps invariant 1 exact --
+        // the money enters circulation through the same account liquidation
+        // returns it to -- and piece 2 replaces both ends with real owners.
+        ledger::transfer(w, ledger::issuer(kIssuer), ledger::firm(index),
+                         w.params.firm_entry_capital, ledger::Reason::FirmFounding,
+                         journal);
     }
 }
 

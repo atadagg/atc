@@ -118,4 +118,12 @@ struct Params {
     // 1 - exp(-k * remove). Behavioural: a slider could move it mid-run, and
     // moving it re-prices the whole chain.
     double commoditization_k = 0.7;
+
+    // Firm entry. Default 0 so the single-good legacy world sees no entry at
+    // all and its draw sequence is untouched; the multi-good configurations
+    // raise it. Behavioural -- a slider could move it, and moving it changes
+    // how fast a shortage is competed away.
+    double firm_entry_prob = 0.0;
+    double firm_entry_margin = 1.2;     // reference price must exceed cost by this
+    double firm_entry_capital = 100.0;  // cash a founded firm starts with
 };

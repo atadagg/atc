@@ -113,3 +113,59 @@ TEST_CASE("a dying firm collects what it is owed before paying its creditors") {
     // Nothing was created or destroyed, and nothing overdrew.
     CHECK(w.books_balance() == doctest::Approx(before + 950.0));
 }
+
+TEST_CASE("entry is off by default, so existing runs are untouched") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    CHECK(w.params.firm_entry_prob == doctest::Approx(0.0));
+
+    std::size_t before = w.firms.size();
+    firm_lifecycle::run_entry(w, rng);
+    CHECK(w.firms.size() == before);
+}
+
+TEST_CASE("a profitable good with a dead producer attracts entry") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    w.params.firm_entry_prob = 1.0;
+    w.params.firm_entry_margin = 1.2;
+
+    w.markets[0].reference_price = 100.0;   // far above any plausible cost
+    w.markets[0].has_reference = true;
+    w.firms[0].alive = false;               // a vacancy in the market
+
+    std::size_t before = w.firms.size();
+    firm_lifecycle::run_entry(w, rng);
+
+    CHECK(w.firms.size() > before);
+    const Firm& founded = w.firms.back();
+    CHECK(founded.alive == true);
+    CHECK(founded.good == 0u);
+    CHECK(founded.liquidity == doctest::Approx(w.params.firm_entry_capital));
+}
+
+TEST_CASE("founding conserves money") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    w.params.firm_entry_prob = 1.0;
+    w.markets[0].reference_price = 100.0;
+    w.markets[0].has_reference = true;
+    w.firms[0].alive = false;
+
+    double before = w.books_balance();
+    firm_lifecycle::run_entry(w, rng);
+    CHECK(w.books_balance() == doctest::Approx(before));
+}
+
+TEST_CASE("no entry when the price does not cover cost") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    w.params.firm_entry_prob = 1.0;
+    w.markets[0].reference_price = 0.001;
+    w.markets[0].has_reference = true;
+    w.firms[0].alive = false;
+
+    std::size_t before = w.firms.size();
+    firm_lifecycle::run_entry(w, rng);
+    CHECK(w.firms.size() == before);
+}

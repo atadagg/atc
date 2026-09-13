@@ -268,6 +268,12 @@ void run(World& w, Rng& rng, ledger::Journal* journal) {
     // `settle_trade_credit` and `pay_wages` is the point of least distortion:
     // the supply bills and the payroll have both landed.
     firm_lifecycle::run_deaths(w, rng, journal);
+    // Entry after exit, so a good's vacancy this month reflects everything
+    // that died in it. run_entry may append to (and reallocate) w.firms; no
+    // reference or pointer into w.firms is held across this call anywhere in
+    // this function -- roll_demand below takes its own fresh iterator rather
+    // than reusing one from an earlier step.
+    firm_lifecycle::run_entry(w, rng, journal);
     roll_demand(w);
 }
 

@@ -34,4 +34,18 @@ void liquidate(World& w, uint32_t firm, ledger::Journal* journal = nullptr);
 // in the .cpp).
 void run_deaths(World& w, Rng& rng, ledger::Journal* journal = nullptr);
 
+// Firm entry: the other half of the lifecycle. A good whose reference price
+// pays well above what it costs to make, and that has fewer living producers
+// than it once did, attracts a new entrant.
+//
+// Returns immediately -- before touching `rng` at all -- when
+// `Params::firm_entry_prob` is <= 0.0. That is what keeps the legacy
+// single-good economy's draw sequence, and therefore every existing golden
+// run, untouched by this feature's mere existence.
+//
+// Appending to `w.firms` may reallocate the vector. Callers must not hold a
+// reference or pointer into `w.firms` across this call -- see the audit note
+// in month_close::run.
+void run_entry(World& w, Rng& rng, ledger::Journal* journal = nullptr);
+
 }  // namespace firm_lifecycle
