@@ -6,6 +6,7 @@
 #include <numeric>
 #include <vector>
 
+#include "goods.hpp"
 #include "ledger.hpp"
 #include "market.hpp"
 #include "network.hpp"
@@ -27,6 +28,13 @@ struct BuyerView {
     uint32_t link_count;
     double daily_target;
     ledger::Account account;
+
+    // Where a firm's purchases land, and the month's remaining want they draw
+    // down. Both null for a household: its target is already a daily slice of
+    // planned_consumption and nothing stockpiles what it eats.
+    double* stock = nullptr;
+    double* demand = nullptr;
+    ledger::Reason reason = ledger::Reason::Purchase;
 };
 
 // The widest set of links any buyer holds: a household's shops, or a firm's
@@ -45,10 +53,35 @@ BuyerView view_of(World& w, Buyer b) {
                          h.planned_consumption / params::kDaysPerMonth,
                          ledger::household(b.index)};
     }
-    // Firms do not buy yet. A zero link count returns before any randomness is
-    // drawn, so the firm path consumes no RNG at all.
-    return BuyerView{&w.firms[b.index].liquidity, nullptr, nullptr, 0, 0.0,
-                     ledger::firm(b.index)};
+
+    // A firm making a good with no material inputs buys nothing. The empty
+    // view is formed WITHOUT touching w.firms, so this is also the answer for
+    // a caller that has no firm in mind -- and, more importantly, `buy`
+    // returns on link_count == 0 before it draws a single random number. That
+    // is what keeps the single-good world byte-identical.
+    const BuyerView none{nullptr, nullptr, nullptr, 0, 0.0, ledger::firm(b.index)};
+    if (b.good == NO_GOOD) return none;
+
+    Firm& f = w.firms[b.index];
+    const Good& recipe = w.goods[f.good];
+
+    // Which input slot group this good occupies in the recipe.
+    uint32_t input = params::kMaxInputs;
+    for (uint32_t i = 0; i < params::kMaxInputs; ++i) {
+        if (recipe.inputs[i] == b.good) { input = i; break; }
+    }
+    if (input == params::kMaxInputs) return none;
+
+    const uint32_t base = input * params::kSuppliersPerInput;
+    return BuyerView{&f.liquidity,
+                     f.suppliers.data() + base,
+                     f.input_unsatisfied.data() + base,
+                     params::kSuppliersPerInput,
+                     f.input_demand[input] / params::kDaysPerMonth,
+                     ledger::firm(b.index),
+                     &f.input_stock[input],
+                     &f.input_demand[input],
+                     ledger::Reason::InputPurchase};
 }
 
 }  // namespace
@@ -82,6 +115,9 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
 
         uint32_t slot = order[visit];
         uint32_t firm_idx = view.links[slot];
+        // An empty supplier slot. Households never hold one; a firm does until
+        // its supplier search fills it.
+        if (firm_idx == NO_FIRM) continue;
         Firm& f = w.firms[firm_idx];
 
         const double wanted = remaining;
@@ -99,10 +135,17 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
             // can never push the buyer slightly negative.
             double cost = std::min(bought * f.price, *view.liquidity);
             ledger::transfer(w, view.account, ledger::firm(firm_idx), cost,
-                             ledger::Reason::Purchase, journal);
+                             view.reason, journal);
             market::record_trade(w, f.good, bought, cost);
             f.inventory -= bought;
             remaining -= bought;
+
+            // A household consumes what it buys; a firm stockpiles it against
+            // the month's production and reduces what it still wants.
+            if (view.stock != nullptr) *view.stock += bought;
+            if (view.demand != nullptr) {
+                *view.demand = std::max(0.0, *view.demand - bought);
+            }
         }
 
         // Whatever this seller could not supply is its share of the shortfall.
@@ -134,6 +177,25 @@ void run_day(World& w, Rng& rng, ledger::Journal* journal) {
     rng.shuffle(order);
 
     for (uint32_t h : order) shop(w, h, rng, journal);
+
+    // Firms restock their inputs after households have shopped and before
+    // production consumes them. The guard matters: in a single-good world
+    // there is nothing upstream to buy, and the shuffle alone would shift
+    // every existing run's draw sequence (invariant 2).
+    if (w.goods.size() > 1) {
+        std::vector<uint32_t> forder(w.firms.size());
+        std::iota(forder.begin(), forder.end(), 0u);
+        rng.shuffle(forder);
+
+        for (uint32_t fi : forder) {
+            const Good& recipe = w.goods[w.firms[fi].good];
+            for (uint32_t i = 0; i < params::kMaxInputs; ++i) {
+                if (recipe.inputs[i] == NO_GOOD) continue;
+                buy(w, Buyer{BuyerKind::Firm, fi, recipe.inputs[i]}, rng, journal);
+            }
+        }
+    }
+
     produce(w);
 }
 

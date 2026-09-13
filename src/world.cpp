@@ -34,6 +34,9 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     firms.resize(n_firms);
     households.resize(n_households);
 
+    // An empty supplier slot is NO_FIRM, not firm 0.
+    for (Firm& f : firms) f.suppliers.fill(NO_FIRM);
+
     for (uint32_t h = 0; h < n_households; ++h) {
         Household& hh = households[h];
 

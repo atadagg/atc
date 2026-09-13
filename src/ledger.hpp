@@ -60,6 +60,7 @@ enum class Reason : uint8_t {
     Wage,      // firm -> employee, at month close
     Profit,    // firm -> household, the ownership proxy
     Issuance,  // issuer -> anyone: money entering circulation
+    InputPurchase,  // firm -> firm, a daily input buy
 };
 
 // Wages and profits move at month close, outside any day.
@@ -78,7 +79,7 @@ struct Entry {
 // How many `Reason`s there are. `reason_index` is the tally slot for one, so a
 // widened `Reason` widens every total with it rather than leaving a new kind of
 // movement silently uncounted.
-inline constexpr std::size_t kReasonCount = 5;
+inline constexpr std::size_t kReasonCount = 6;
 
 constexpr std::size_t reason_index(Reason r) { return static_cast<std::size_t>(r); }
 

@@ -12,6 +12,12 @@ void record_trade(World& w, uint32_t good, double qty, double value) {
 }
 
 void publish(World& w) {
+    // Markets are index-parallel to goods. Reconcile here rather than trusting
+    // every caller that adds a good to remember to resize: a newly added good
+    // simply gets a market with no reference price yet. Existing entries keep
+    // their accumulated trades and published price.
+    if (w.markets.size() != w.goods.size()) w.markets.resize(w.goods.size());
+
     for (GoodMarket& m : w.markets) {
         if (m.traded_qty > 0.0) {
             m.reference_price = m.traded_value / m.traded_qty;

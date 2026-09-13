@@ -32,4 +32,15 @@ uint32_t random_unconnected_firm_by_size(const World& w, uint32_t household, Rng
 // Returns NO_FIRM if every firm is already connected.
 uint32_t random_unconnected_firm(const World& w, uint32_t household, Rng& rng);
 
+// Draw a firm that produces `good` and that `firm` does not already buy from,
+// with probability proportional to size in employees -- the same visibility
+// weighting the household price-comparison path uses, and for the same
+// reason. Zero-employee producers keep weight 1 so they are not permanently
+// excluded. Returns NO_FIRM if every producer is already connected.
+//
+// Deliberately NOT shared with random_unconnected_firm_by_size: that one
+// searches for a household's shop, this one for a firm's supplier of one
+// input. See CLAUDE.md on why the rewiring draws are kept apart.
+uint32_t random_unconnected_producer(const World& w, uint32_t firm, uint32_t good, Rng& rng);
+
 }  // namespace network

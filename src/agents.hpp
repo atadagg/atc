@@ -32,6 +32,24 @@ struct Firm {
 
     // Firing is decided this month, applied next month (job-protection lag).
     uint32_t pending_fire = NO_HOUSEHOLD;
+
+    // Input stock, one slot per recipe input, parallel to Good::inputs.
+    std::array<double, params::kMaxInputs> input_stock{};
+
+    // What this firm still wants of each input this month, set at month open
+    // from planned output and drawn down as it buys. The firm-side analogue
+    // of Household::planned_consumption.
+    std::array<double, params::kMaxInputs> input_demand{};
+
+    // Supplier links: kSuppliersPerInput slots per input, laid out
+    // input-major, so input i owns slots [i*kSuppliersPerInput,
+    // (i+1)*kSuppliersPerInput). NO_FIRM means the slot is empty.
+    std::array<uint32_t, params::kMaxInputs * params::kSuppliersPerInput> suppliers{};
+
+    // Unmet input demand per supplier slot, parallel to `suppliers`. Drives
+    // supplier rewiring exactly as Household::unsatisfied drives shop
+    // rewiring.
+    std::array<double, params::kMaxInputs * params::kSuppliersPerInput> input_unsatisfied{};
 };
 
 struct Household {
