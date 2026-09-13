@@ -50,6 +50,17 @@ struct Firm {
     // supplier rewiring exactly as Household::unsatisfied drives shop
     // rewiring.
     std::array<double, params::kMaxInputs * params::kSuppliersPerInput> input_unsatisfied{};
+
+    // Trade credit. `payables` is owed to suppliers, `receivables` is owed by
+    // customers; both settle at month close.
+    double payables = 0.0;
+    double receivables = 0.0;
+
+    // Inventory is carried at cost, so equity does not move when a firm
+    // merely re-prices its shelf. One moving-average cost per firm: a firm
+    // makes one good, so one number is enough.
+    double output_cost_basis = 0.0;
+    std::array<double, params::kMaxInputs> input_cost_basis{};
 };
 
 struct Household {

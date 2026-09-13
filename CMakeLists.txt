@@ -31,6 +31,7 @@ add_library(atc_core
     src/identity_lexicon.cpp
     src/identity_glyphs.cpp
     src/identity_svg.cpp
+    src/balance_sheet.cpp
 )
 target_include_directories(atc_core PUBLIC src)
 
@@ -69,6 +70,7 @@ add_executable(atc_tests
     tests/test_goods.cpp
     tests/test_market.cpp
     tests/test_supply_chain.cpp
+    tests/test_balance_sheet.cpp
     tests/test_recorder.cpp
     tests/test_identity.cpp
     tests/test_identity_names.cpp
