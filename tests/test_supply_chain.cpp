@@ -162,6 +162,10 @@ TEST_CASE("run_day moves inputs from ore firms to bread firms") {
         w.firms[f].liquidity = 5000.0;
         w.firms[f].input_demand[0] = 21.0;
         w.firms[f].inventory = 1000.0;  // so households do not stock them out
+        // No workforce: this test is about the day MOVING ore into the bread
+        // firms' input_stock, not about production consuming it again in the
+        // same day now that produce() is input-limited.
+        w.firms[f].employees.clear();
     }
 
     const double ore_before = w.firms[0].inventory + w.firms[1].inventory;
@@ -185,4 +189,43 @@ TEST_CASE("run_day moves inputs from ore firms to bread firms") {
                                                           w.firms[1].employees.size()) ==
           doctest::Approx(stocked));
     CHECK(w.books_balance() == doctest::Approx(books_before));
+}
+
+TEST_CASE("output is limited by the scarcest input, not by labour alone") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+
+    Firm& bread = w.firms[2];
+    bread.employees = {0, 1, 2};       // labour capacity = 3 * productivity = 9
+    bread.input_stock[0] = 2.0;        // enough ore for 2 / 0.5 = 4 units
+
+    daily::produce(w);
+
+    CHECK(bread.inventory == doctest::Approx(4.0));
+    CHECK(bread.input_stock[0] == doctest::Approx(0.0));
+}
+
+TEST_CASE("an input stockout upstream stops output downstream") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+
+    Firm& bread = w.firms[2];
+    bread.employees = {0, 1, 2};
+    bread.input_stock[0] = 0.0;
+
+    daily::produce(w);
+
+    CHECK(bread.inventory == doctest::Approx(0.0));
+}
+
+TEST_CASE("a firm with no material inputs still produces on labour alone") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+
+    Firm& ore = w.firms[0];
+    ore.employees = {10, 11};
+
+    daily::produce(w);
+
+    CHECK(ore.inventory == doctest::Approx(2.0 * w.params.productivity));
 }

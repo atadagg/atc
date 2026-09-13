@@ -167,8 +167,29 @@ void shop(World& w, uint32_t household, Rng& rng, ledger::Journal* journal) {
 }
 
 void produce(World& w) {
-    for (auto& f : w.firms) {
-        f.inventory += w.params.productivity * static_cast<double>(f.employees.size());
+    for (Firm& f : w.firms) {
+        const Good& g = w.goods[f.good];
+
+        double by_labour = w.params.productivity * static_cast<double>(f.employees.size());
+
+        // Leontief: no substitution between inputs. Short of iron, extra
+        // fibre does not help. That is exactly what makes a stockout travel
+        // up the chain instead of being absorbed at the first firm that hits
+        // it.
+        double limit = by_labour;
+        for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+            if (g.inputs[s] == NO_GOOD) continue;
+            if (g.input_qty[s] <= 0.0) continue;
+            limit = std::min(limit, f.input_stock[s] / g.input_qty[s]);
+        }
+        if (limit <= 0.0) continue;
+
+        for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+            if (g.inputs[s] == NO_GOOD) continue;
+            f.input_stock[s] -= limit * g.input_qty[s];
+            if (f.input_stock[s] < 0.0) f.input_stock[s] = 0.0;
+        }
+        f.inventory += limit;
     }
 }
 
