@@ -1,3 +1,6 @@
+#include <numeric>
+#include <vector>
+
 #include "doctest.h"
 #include "daily.hpp"
 #include "network.hpp"
@@ -115,4 +118,37 @@ TEST_CASE("a full day conserves money") {
     double before = w.books_balance();
     daily::run_day(w, rng);
     CHECK(w.books_balance() == doctest::Approx(before));
+}
+
+TEST_CASE("household buying through the Buyer path is unchanged") {
+    Rng rng(11);
+    World w(50, 10, rng);
+    for (Firm& f : w.firms) { f.inventory = 100.0; f.price = 1.5; }
+    for (Household& h : w.households) h.planned_consumption = 21.0;
+
+    World before = w;
+
+    Rng ra(11);
+    daily::run_day(w, ra);
+
+    // The same day, driven through the explicit Buyer entry point, must
+    // produce identical state. If these diverge the generalisation changed
+    // behaviour it was meant to preserve.
+    World w2 = before;
+    Rng rb(11);
+    std::vector<uint32_t> order(w2.households.size());
+    std::iota(order.begin(), order.end(), 0u);
+    rb.shuffle(order);
+    for (uint32_t h : order) {
+        daily::buy(w2, daily::Buyer{daily::BuyerKind::Household, h, 0}, rb);
+    }
+    daily::produce(w2);
+
+    for (std::size_t i = 0; i < w.firms.size(); ++i) {
+        CHECK(w.firms[i].liquidity == doctest::Approx(w2.firms[i].liquidity));
+        CHECK(w.firms[i].inventory == doctest::Approx(w2.firms[i].inventory));
+    }
+    for (std::size_t i = 0; i < w.households.size(); ++i) {
+        CHECK(w.households[i].liquidity == doctest::Approx(w2.households[i].liquidity));
+    }
 }
