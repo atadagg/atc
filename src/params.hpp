@@ -112,4 +112,10 @@ struct Params {
     // the absorbing state.
     double max_emergency_wage_cut = 0.5;
     double min_wage = 1.0;
+
+    // --- Supply chain (not in Table 1) ---
+    // How fast a good becomes commodity-like as it moves upstream, in
+    // 1 - exp(-k * remove). Behavioural: a slider could move it mid-run, and
+    // moving it re-prices the whole chain.
+    double commoditization_k = 0.7;
 };

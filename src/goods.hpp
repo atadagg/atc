@@ -31,3 +31,18 @@ struct Good {
     // unchanged.
     double commoditization = 0.0;
 };
+
+#include <vector>
+
+namespace goods {
+
+// Throws std::invalid_argument if the recipe graph contains a cycle.
+// The graph must be a DAG: a good cannot be an input to making itself.
+void assert_acyclic(const std::vector<Good>& goods);
+
+// Recomputes `remove` and `commoditization` for every good. Call after any
+// change to the graph. Throws std::invalid_argument on a cycle, or if no good
+// is marked `consumer` (there is then nothing to measure distance to).
+void recompute(std::vector<Good>& goods, double k);
+
+}  // namespace goods

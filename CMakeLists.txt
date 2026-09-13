@@ -15,6 +15,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 add_library(atc_core
     src/rng.cpp
     src/world.cpp
+    src/goods.cpp
     src/ledger.cpp
     src/intervention.cpp
     src/scenario.cpp
