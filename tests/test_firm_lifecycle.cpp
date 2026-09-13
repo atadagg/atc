@@ -76,3 +76,40 @@ TEST_CASE("in a world with no debt nothing dies") {
     firm_lifecycle::run_deaths(w, rng);
     for (const Firm& f : w.firms) CHECK(f.alive == true);
 }
+
+TEST_CASE("a dying firm collects what it is owed before paying its creditors") {
+    Rng rng(2);
+    World w(30, 4, rng);
+    const double before = w.books_balance();
+
+    // Firm 1 is dying. Firm 3 owes it 900 and can pay; firm 1 owes firm 2
+    // 1000 and cannot.
+    w.firms[3].liquidity = 950.0;
+    w.firms[3].payables = 900.0;
+    w.firms[3].payable_to[0] = 1;
+    w.firms[3].payable_amount[0] = 900.0;
+
+    w.firms[1].receivables = 900.0;
+    w.firms[1].payables = 1000.0;
+    w.firms[1].payable_to[0] = 2;
+    w.firms[1].payable_amount[0] = 1000.0;
+    w.firms[2].receivables = 1000.0;
+
+    firm_lifecycle::run_deaths(w, rng);
+
+    CHECK(w.firms[1].alive == false);
+
+    // The debtor paid what it owed: no windfall, no cancelled debt.
+    CHECK(w.firms[3].alive == true);
+    CHECK(w.firms[3].liquidity == doctest::Approx(50.0));
+    CHECK(w.firms[3].payables == doctest::Approx(0.0));
+    CHECK(balance_sheet::of(w, 3).equity() == doctest::Approx(50.0));
+
+    // The creditor recovered the 900 that was collected, and wrote off only
+    // the uncollectable 100.
+    CHECK(w.firms[2].liquidity == doctest::Approx(900.0));
+    CHECK(w.firms[2].receivables == doctest::Approx(0.0));
+
+    // Nothing was created or destroyed, and nothing overdrew.
+    CHECK(w.books_balance() == doctest::Approx(before + 950.0));
+}

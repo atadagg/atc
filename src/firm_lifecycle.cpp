@@ -38,6 +38,32 @@ void liquidate(World& w, uint32_t firm, ledger::Journal* journal) {
     f.months_fully_staffed = 0;
     f.pending_fire = NO_HOUSEHOLD;
 
+    // Money owed TO a dying firm is one of its ASSETS, so it is COLLECTED
+    // before anything is paid out, not forgiven. Forgiving it would make a
+    // firm's death leave its debtors better off -- contagion running
+    // backwards, the opposite of what this module exists to produce.
+    //
+    // Each debtor pays what it can: capped at its own cash, so no non-issuer
+    // is pushed below zero. A debtor drained here may itself become
+    // insolvent; that is the cascade travelling DOWNSTREAM, and the next pass
+    // of `run_deaths` picks it up.
+    for (uint32_t other = 0; other < w.firms.size(); ++other) {
+        if (other == firm) continue;
+        Firm& d = w.firms[other];
+        if (!d.alive || d.payables <= 0.0) continue;
+        for (std::size_t s = 0; s < d.payable_to.size(); ++s) {
+            if (d.payable_to[s] != firm) continue;
+            const double pay = std::min(d.payable_amount[s], d.liquidity);
+            if (pay > 0.0) {
+                ledger::transfer(w, ledger::firm(other), ledger::firm(firm), pay,
+                                 ledger::Reason::FirmLiquidation, journal);
+                d.payable_amount[s] -= pay;
+                d.payables -= pay;
+                if (d.payables < 0.0) d.payables = 0.0;
+            }
+        }
+    }
+
     // Residual cash to creditors, pro-rata by what each is owed. Whatever a
     // creditor is not paid stays unpaid: its receivable is removed from its
     // books in full, so the shortfall lands on its equity as a write-off.
@@ -84,16 +110,18 @@ void liquidate(World& w, uint32_t firm, ledger::Journal* journal) {
                          ledger::Reason::FirmLiquidation, journal);
     }
 
-    // A dead firm cannot collect. Its debtors' arrears are cancelled rather
-    // than left standing: a payable pointing at a corpse would be settled
-    // next month into an account nothing ever empties again (money leaking
-    // out of circulation), and in the meantime it would count as a liability
-    // against a creditor that no longer exists. Cancelling here is the only
-    // reading that keeps both the money stock and the solvency test honest.
+    // Only what could NOT be collected is cancelled -- a debtor that was out
+    // of cash above. This runs last so that everything collectable has
+    // already entered the pot and been paid on to the creditors.
+    //
+    // It is load-bearing, not tidying: after it, no living firm holds a
+    // `payable_to` pointing at a corpse, so no later settlement can transfer
+    // cash into a dead firm's account, where nothing would ever empty it
+    // again. It also stops a liability to a creditor that no longer exists
+    // from counting against the debtor's solvency.
     for (uint32_t other = 0; other < w.firms.size(); ++other) {
         if (other == firm) continue;
         Firm& d = w.firms[other];
-        if (d.payables <= 0.0) continue;
         for (std::size_t s = 0; s < d.payable_to.size(); ++s) {
             if (d.payable_to[s] != firm) continue;
             d.payables -= d.payable_amount[s];

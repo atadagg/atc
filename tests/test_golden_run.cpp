@@ -67,7 +67,7 @@ TEST_CASE("golden run: seed 1, 120 months, byte-identical") {
     Scheduler sched(w, rng);
     for (int m = 0; m < 120; ++m) sched.run_month();
 
-    CHECK(golden::run_hash(w) == 15776243924562223517ull);  // placeholder, replaced in step 3
+    CHECK(golden::run_hash(w) == 15776243924562223517ull);
 }
 
 TEST_CASE("golden run: same seed twice agrees") {
