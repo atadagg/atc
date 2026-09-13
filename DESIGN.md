@@ -37,8 +37,14 @@ you run sales). Late game: delegate via hired executives to scale.
   it's the star mechanic, not something to abstract away.
 
 ## Companies
-- No supply-chain simulation — doesn't fit the spirit of an
-  invention/innovation-focused game.
+- **Supply chain is the game.** Firms make goods out of other goods. A
+  good's distance from the consumer sets how commodity-like it is: iron
+  ore has something resembling a central market and one visible price,
+  a house does not. That is a sliding scale, not two systems — there is
+  never an auctioneer, only a published average of what actually traded.
+  The graph grows as Innovations are researched, so today's exotic
+  product becomes tomorrow's commodity input, and two runs diverge.
+  See `docs/superpowers/specs/2026-09-13-production-economy-design.md`.
 - Product development = pick which researched Innovation a product line
   embodies, plus a quality/investment dial. Not an engineering minigame.
 - Operational dials per company: pricing, which segments to target,
@@ -89,8 +95,6 @@ player and rivals, which keeps balance and scope sane.
   government, rivals, and the council can: spell approval can be
   denied, monopolies risk antitrust breakup, bad standing risks
   bankruptcy.
-- No separate faction/diplomacy system — this stays mechanically the
-  same tree + event system as everything else.
 
 ## Win/Loss
 No win condition — open-ended, sandbox, legacy-driven (Rimworld/CK
@@ -104,7 +108,14 @@ or the council.
 ## UI
 Not a dashboard-of-tabs, not an explorable room (room UI adds spatial-
 mapping friction with no mechanical payoff — see Gear City).
-Instead: a clean, chart/ledger-forward home screen — your financial
+Instead: an **ERP terminal** — SAP as the reference point, which fits
+because ERP is literally the software you run a firm's operations and
+books on. A single diegetic frame is allowed and wanted: a wizard tower
+room with a scrying terminal you click once to go full-screen. That is
+a frame, not navigation — one click deep, then the real UI — which is
+why it does not reintroduce the Gear City problem.
+
+Behind that frame: a clean, chart/ledger-forward home screen — your financial
 situation and performance charts, Stonks-9800-style — with the map,
 research tree, segments view, and chronicle/news feed as switchable
 panels.
@@ -209,7 +220,8 @@ to redesign rather than copy, and it generalises to every seat, including the
 ERP-style firm seat.
 
 ## Open Questions
-- What engine/language to prototype in (not yet discussed).
+- ~~What engine/language to prototype in~~ — answered: C++ inside this
+  repo, as seats in the running simulation. See Player Seats.
 - Exact shape of the lean-testing loop for segment targeting.
 - Exact shape of the Stonks-9800-style hiring mechanic.
 - Which agent seats ship first, and what a firm (ERP-style) seat
