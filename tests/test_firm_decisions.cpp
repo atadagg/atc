@@ -278,12 +278,18 @@ TEST_CASE("at commoditization 0 the price rule is untouched by the reference") {
     for (Firm& f : w.firms) f.price = 1.0;
     World before = w;
 
-    firm_decisions::adjust_price(w, rng);
+    for (Firm& f : w.firms) {
+        firm_decisions::adjust_price(f, w.params, rng);
+        firm_decisions::pull_toward_reference(f, w);
+    }
 
     Rng rng2(3);
     World w2 = before;
     w2.markets[0].has_reference = false;  // no reference at all
-    firm_decisions::adjust_price(w2, rng2);
+    for (Firm& f : w2.firms) {
+        firm_decisions::adjust_price(f, w2.params, rng2);
+        firm_decisions::pull_toward_reference(f, w2);
+    }
 
     for (std::size_t i = 0; i < w.firms.size(); ++i) {
         CHECK(w.firms[i].price == doctest::Approx(w2.firms[i].price));
@@ -298,7 +304,10 @@ TEST_CASE("at commoditization 1 the firm is a price taker") {
     w.markets[0].has_reference = true;
     for (Firm& f : w.firms) f.price = 1.0;
 
-    firm_decisions::adjust_price(w, rng);
+    for (Firm& f : w.firms) {
+        firm_decisions::adjust_price(f, w.params, rng);
+        firm_decisions::pull_toward_reference(f, w);
+    }
 
     for (const Firm& f : w.firms) CHECK(f.price == doctest::Approx(5.0));
 }
@@ -311,7 +320,10 @@ TEST_CASE("partial commoditization moves the price part of the way") {
     w.markets[0].has_reference = true;
     for (Firm& f : w.firms) f.price = 1.0;
 
-    firm_decisions::adjust_price(w, rng);
+    for (Firm& f : w.firms) {
+        firm_decisions::adjust_price(f, w.params, rng);
+        firm_decisions::pull_toward_reference(f, w);
+    }
 
     // Whatever the firm's own rule decided, the result sits strictly between
     // that and the reference -- the pull is a blend, never a jump.

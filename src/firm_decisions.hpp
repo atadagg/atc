@@ -28,11 +28,18 @@ void adjust_wage(Firm& f, const Params& p, Rng& rng);
 void adjust_workforce(World& w, uint32_t firm, Rng& rng);
 void adjust_price(Firm& f, const Params& p, Rng& rng);
 
-// World-level overload: runs the gated rule above for every firm, then pulls
-// each firm's price toward its good's published reference, weighted by the
-// good's commoditization. At commoditization 0 (or with no reference yet)
-// this is the identity on top of the per-firm rule.
-void adjust_price(World& w, Rng& rng);
+// The commoditization pull. The firm's own gated rule above (raise only
+// while below the cap, lower only while above the floor -- see CLAUDE.md, it
+// is gated rather than clamped) decides what the firm WANTS. This blends
+// that toward what the good actually trades at, weighted by how far the good
+// sits from the consumer.
+//
+// At 0 this is the identity and today's economy is untouched. At 1 the firm
+// is a pure price taker: iron ore sells at the iron ore price whatever its
+// producer would prefer. Nothing here is an auctioneer -- the reference is
+// last month's realised average, and a firm at the reference price can still
+// fail to sell.
+void pull_toward_reference(Firm& f, const World& w);
 
 // Runs the three rules above for every firm, in index order.
 void run_monthly(World& w, Rng& rng);
