@@ -86,6 +86,63 @@ void pull_toward_reference(Firm& f, const World& w) {
     }
 }
 
+void plan_inputs(World& w) {
+    for (Firm& f : w.firms) {
+        if (!f.alive) continue;
+        const Good& g = w.goods[f.good];
+
+        // Same quantity daily::produce's `by_labour` computes: what labour
+        // alone could make this month. Planning against anything else would
+        // make the firm systematically over- or under-order relative to what
+        // it can actually turn the inputs into.
+        double labour_capacity =
+            w.params.productivity * static_cast<double>(f.employees.size()) / g.labour_per_unit;
+
+        for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+            if (g.inputs[s] == NO_GOOD) continue;
+            f.input_demand[s] = labour_capacity * params::kDaysPerMonth * g.input_qty[s];
+        }
+    }
+}
+
+void rewire_suppliers(World& w, Rng& rng) {
+    for (uint32_t i = 0; i < w.firms.size(); ++i) {
+        Firm& f = w.firms[i];
+        if (!f.alive) continue;
+        const Good& g = w.goods[f.good];
+
+        // A firm whose good has no material inputs has no supplier slots to
+        // fill. This check must precede every use of `rng` below -- it is
+        // what keeps the single-good legacy world's draw sequence untouched.
+        bool has_inputs = false;
+        for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+            if (g.inputs[s] != NO_GOOD) { has_inputs = true; break; }
+        }
+        if (!has_inputs) continue;
+
+        for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+            if (g.inputs[s] == NO_GOOD) continue;
+            const uint32_t base = s * params::kSuppliersPerInput;
+            for (uint32_t k = 0; k < params::kSuppliersPerInput; ++k) {
+                const uint32_t slot = base + k;
+                const bool empty_slot = f.suppliers[slot] == NO_FIRM;
+                const bool rationed = f.input_unsatisfied[slot] > 0.0;
+                if (!empty_slot && !rationed) continue;
+
+                uint32_t replacement =
+                    network::random_unconnected_producer(w, i, g.inputs[s], rng);
+                if (replacement == NO_FIRM) continue;  // no eligible producer left
+                f.suppliers[slot] = replacement;
+            }
+        }
+
+        // Consumed by this month's rewiring decision, exactly as
+        // Household::unsatisfied is consumed by shop rewiring and then
+        // cleared (CLAUDE.md's ordering note).
+        f.input_unsatisfied.fill(0.0);
+    }
+}
+
 void run_monthly(World& w, Rng& rng) {
     for (uint32_t i = 0; i < w.firms.size(); ++i) {
         Firm& f = w.firms[i];
@@ -95,6 +152,9 @@ void run_monthly(World& w, Rng& rng) {
         adjust_price(f, w.params, rng);
         pull_toward_reference(f, w);
     }
+
+    rewire_suppliers(w, rng);
+    plan_inputs(w);
 }
 
 }  // namespace firm_decisions

@@ -41,7 +41,26 @@ void adjust_price(Firm& f, const Params& p, Rng& rng);
 // fail to sell.
 void pull_toward_reference(Firm& f, const World& w);
 
-// Runs the three rules above for every firm, in index order.
+// Sets `input_demand[s]` for every living firm from its current headcount --
+// the same labour capacity `daily::produce` computes (productivity *
+// employees / labour_per_unit), extended over the month and priced in units
+// of input `s` via the recipe's `input_qty[s]`. Empty recipe slots are
+// skipped. A firm whose good has no inputs touches nothing.
+void plan_inputs(World& w);
+
+// Mirrors household_decisions::search_reliable_shop for firms: any supplier
+// slot that is empty (NO_FIRM, including a newly founded firm's whole
+// roster) or that rationed the firm this month (input_unsatisfied > 0) is
+// replaced by a fresh draw from network::random_unconnected_producer. Clears
+// input_unsatisfied afterwards, matching how Household::unsatisfied is
+// consumed by shop rewiring and then cleared.
+//
+// A firm whose good has no material inputs returns before touching `rng` --
+// that is what keeps the single-good legacy world's draw sequence, and
+// therefore the golden hash, untouched.
+void rewire_suppliers(World& w, Rng& rng);
+
+// Runs the rules above for every firm, in index order.
 void run_monthly(World& w, Rng& rng);
 
 }  // namespace firm_decisions

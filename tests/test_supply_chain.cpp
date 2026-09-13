@@ -4,6 +4,7 @@
 #include "doctest.h"
 #include "balance_sheet.hpp"
 #include "daily.hpp"
+#include "firm_decisions.hpp"
 #include "goods.hpp"
 #include "market.hpp"
 #include "month_close.hpp"
@@ -388,4 +389,40 @@ TEST_CASE("buying inputs on credit and producing does not read as insolvent") {
     balance_sheet::Sheet s = balance_sheet::of(w, 2);
     CHECK(s.equity() == doctest::Approx(0.0));
     CHECK_FALSE(s.insolvent());
+}
+
+TEST_CASE("planned input demand follows planned output") {
+    Rng rng(6);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    bread.employees = {0, 1, 2};   // 3 * productivity units of output capacity
+
+    firm_decisions::plan_inputs(w);
+
+    // 9 units of bread at 0.5 ore each = 4.5 ore for the month.
+    CHECK(bread.input_demand[0] ==
+          doctest::Approx(3.0 * w.params.productivity * 0.5 * params::kDaysPerMonth));
+}
+
+TEST_CASE("a firm rationed by a supplier rewires away from it") {
+    Rng rng(6);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    bread.suppliers[0] = 0;
+    bread.input_unsatisfied[0] = 500.0;   // firm 0 kept turning it away
+
+    firm_decisions::rewire_suppliers(w, rng);
+
+    CHECK(bread.suppliers[0] != 0u);
+    CHECK(bread.input_unsatisfied[0] == doctest::Approx(0.0));
+}
+
+TEST_CASE("a firm with no material inputs draws nothing when rewiring") {
+    Rng rng(6);
+    World w(20, 4, rng);   // single-good world
+
+    Rng a(77);
+    firm_decisions::rewire_suppliers(w, a);
+    Rng b(77);
+    CHECK(a.uniform(0.0, 1.0) == doctest::Approx(b.uniform(0.0, 1.0)));
 }
