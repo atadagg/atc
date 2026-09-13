@@ -5,6 +5,7 @@
 #include "daily.hpp"
 #include "goods.hpp"
 #include "market.hpp"
+#include "month_close.hpp"
 #include "network.hpp"
 #include "world.hpp"
 
@@ -169,7 +170,7 @@ TEST_CASE("run_day moves inputs from ore firms to bread firms") {
     }
 
     const double ore_before = w.firms[0].inventory + w.firms[1].inventory;
-    const double cash_before = w.firms[0].liquidity + w.firms[1].liquidity;
+    const double owed_before = w.firms[0].receivables + w.firms[1].receivables;
     // The fixture hands out cash by direct assignment, so the books do not sum
     // to zero here; what must hold is that the day MOVES money without
     // creating any.
@@ -181,9 +182,11 @@ TEST_CASE("run_day moves inputs from ore firms to bread firms") {
     for (uint32_t f = 2; f < 5; ++f) stocked += w.firms[f].input_stock[0];
 
     CHECK(stocked > 0.0);
+    // Inputs are bought on trade credit, so the ore firms' cash does not move
+    // during the day -- what grows is what they are owed.
+    CHECK(w.firms[0].receivables + w.firms[1].receivables > owed_before);
     // Production adds to the ore firms' inventory too, so compare the sold
     // quantity against what the bread firms took in.
-    CHECK(w.firms[0].liquidity + w.firms[1].liquidity > cash_before);
     CHECK(ore_before - (w.firms[0].inventory + w.firms[1].inventory) +
               w.params.productivity * static_cast<double>(w.firms[0].employees.size() +
                                                           w.firms[1].employees.size()) ==
@@ -228,4 +231,59 @@ TEST_CASE("a firm with no material inputs still produces on labour alone") {
     daily::produce(w);
 
     CHECK(ore.inventory == doctest::Approx(2.0 * w.params.productivity));
+}
+
+TEST_CASE("an input purchase creates a payable, not an immediate payment") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    w.firms[0].inventory = 100.0;
+    w.firms[0].price = 2.0;
+    w.firms[2].suppliers[0] = 0;
+    w.firms[2].liquidity = 1000.0;
+    w.firms[2].input_demand[0] = 10.0;
+
+    double buyer_cash = w.firms[2].liquidity;
+    double seller_cash = w.firms[0].liquidity;
+
+    daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+
+    CHECK(w.firms[2].liquidity == doctest::Approx(buyer_cash));
+    CHECK(w.firms[0].liquidity == doctest::Approx(seller_cash));
+    CHECK(w.firms[2].payables > 0.0);
+    CHECK(w.firms[0].receivables == doctest::Approx(w.firms[2].payables));
+}
+
+TEST_CASE("settlement moves the money and clears both sides") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    w.firms[2].liquidity = 1000.0;
+    w.firms[2].payables = 40.0;
+    w.firms[2].payable_to[0] = 0;
+    w.firms[2].payable_amount[0] = 40.0;
+    w.firms[0].receivables = 40.0;
+
+    month_close::settle_trade_credit(w, rng);
+
+    CHECK(w.firms[2].liquidity == doctest::Approx(960.0));
+    CHECK(w.firms[0].liquidity == doctest::Approx(40.0));
+    CHECK(w.firms[2].payables == doctest::Approx(0.0));
+    CHECK(w.firms[0].receivables == doctest::Approx(0.0));
+}
+
+TEST_CASE("the books balance with trade credit outstanding") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    double before = w.books_balance();
+
+    w.firms[0].inventory = 100.0;
+    w.firms[0].price = 2.0;
+    w.firms[2].suppliers[0] = 0;
+    w.firms[2].liquidity = 1000.0;
+    w.firms[2].input_demand[0] = 10.0;
+
+    daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+    CHECK(w.books_balance() == doctest::Approx(before + 1000.0));
+
+    month_close::settle_trade_credit(w, rng);
+    CHECK(w.books_balance() == doctest::Approx(before + 1000.0));
 }

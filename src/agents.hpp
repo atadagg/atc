@@ -51,6 +51,12 @@ struct Firm {
     // rewiring.
     std::array<double, params::kMaxInputs * params::kSuppliersPerInput> input_unsatisfied{};
 
+    // Who this firm owes, and how much, for inputs bought this month. Slots
+    // are parallel to `suppliers`. One month of credit -- everything here
+    // settles at month close, so no per-invoice due dates are needed.
+    std::array<uint32_t, params::kMaxInputs * params::kSuppliersPerInput> payable_to{};
+    std::array<double, params::kMaxInputs * params::kSuppliersPerInput> payable_amount{};
+
     // Trade credit. `payables` is owed to suppliers, `receivables` is owed by
     // customers; both settle at month close.
     double payables = 0.0;

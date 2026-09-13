@@ -184,7 +184,7 @@ TEST_CASE("a full month close conserves money") {
     World w(params::kNumHouseholds, params::kNumFirms, rng);
     for (auto& f : w.firms) { f.liquidity = 500.0; f.wage = 30.0; }
     double before = w.books_balance();
-    month_close::run(w);
+    month_close::run(w, rng);
     CHECK(w.books_balance() == doctest::Approx(before));
 }
 

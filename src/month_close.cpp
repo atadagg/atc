@@ -8,6 +8,7 @@
 
 #include "ledger.hpp"
 #include "network.hpp"
+#include "rng.hpp"
 #include "params.hpp"
 #include "world.hpp"
 
@@ -42,6 +43,72 @@ void check_landed_on_target(double balance, double target, const char* where) {
 }
 
 }  // namespace
+
+void settle_trade_credit(World& w, Rng& rng, ledger::Journal* journal) {
+    // Gather the debtors first. If nobody owes anything the function returns
+    // without touching `rng` -- see the header. This is load-bearing for
+    // determinism, not an optimisation.
+    std::vector<uint32_t> debtors;
+    for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
+        if (w.firms[fi].payables > 0.0) debtors.push_back(fi);
+    }
+    if (debtors.empty()) return;
+
+    rng.shuffle(debtors);
+
+    for (uint32_t fi : debtors) {
+        Firm& f = w.firms[fi];
+
+        double owed = 0.0;
+        for (std::size_t s = 0; s < f.payable_amount.size(); ++s) {
+            if (f.payable_to[s] == NO_FIRM) continue;
+            if (f.payable_amount[s] > 0.0) owed += f.payable_amount[s];
+        }
+        if (owed <= 0.0) {
+            f.payables = 0.0;
+            continue;
+        }
+
+        // Short of cash, the firm pays the same fraction of every bill. The
+        // remainder is NOT forgiven: it stays on the books as the arrears
+        // that the insolvency test reads.
+        const double fraction = f.liquidity >= owed ? 1.0 : f.liquidity / owed;
+
+        double still_owed = 0.0;
+        for (std::size_t s = 0; s < f.payable_amount.size(); ++s) {
+            const uint32_t creditor = f.payable_to[s];
+            if (creditor == NO_FIRM) continue;
+            double bill = f.payable_amount[s];
+            if (bill <= 0.0) {
+                f.payable_to[s] = NO_FIRM;
+                f.payable_amount[s] = 0.0;
+                continue;
+            }
+
+            // Capped at what the account actually holds: rounding in
+            // `fraction` must never reach `transfer` as an overdraft.
+            double pay = std::min(bill * fraction, f.liquidity);
+            if (pay > 0.0) {
+                ledger::transfer(w, ledger::firm(fi), ledger::firm(creditor), pay,
+                                 ledger::Reason::TradeCreditSettlement, journal);
+                Firm& c = w.firms[creditor];
+                c.receivables -= pay;
+                if (c.receivables < 0.0) c.receivables = 0.0;
+            }
+
+            double remainder = bill - pay;
+            if (remainder <= 1e-12) {
+                f.payable_to[s] = NO_FIRM;
+                f.payable_amount[s] = 0.0;
+            } else {
+                f.payable_amount[s] = remainder;
+                still_owed += remainder;
+            }
+        }
+
+        f.payables = still_owed;
+    }
+}
 
 void pay_wages(World& w, ledger::Journal* journal) {
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
@@ -183,7 +250,10 @@ void roll_demand(World& w) {
     }
 }
 
-void run(World& w, ledger::Journal* journal) {
+void run(World& w, Rng& rng, ledger::Journal* journal) {
+    // Suppliers before workers: a payroll squeeze should be a consequence of
+    // a supply bill, not the other way round.
+    settle_trade_credit(w, rng, journal);
     pay_wages(w, journal);
     distribute_profits(w, journal);
     update_reservation_wages(w);

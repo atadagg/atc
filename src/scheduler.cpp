@@ -48,6 +48,6 @@ void Scheduler::run_month() {
     }
 
     if (journal_) journal_->set_time(months_elapsed_, ledger::kMonthClose);
-    month_close::run(world_, journal_);
+    month_close::run(world_, rng_, journal_);
     ++months_elapsed_;
 }

@@ -40,7 +40,33 @@ struct BuyerView {
     // only ~64% of its monthly want.
     double* stock = nullptr;
     ledger::Reason reason = ledger::Reason::Purchase;
+
+    // Non-null for a firm buyer: firms buy inputs on one month's trade
+    // credit, so nothing moves through the ledger at purchase time. A
+    // household pays cash -- consumers do not get trade credit.
+    Firm* buyer_firm = nullptr;
+    uint32_t input = 0;
+    uint32_t slot_base = 0;  // where this input's slots start in the firm arrays
 };
+
+// Where a firm records a new bill from `seller`. Prefers the slot parallel to
+// the supplier link it just bought from, then any slot already owed to that
+// seller, then any free slot. Returns kNoSlot when the firm is out of slots,
+// which the caller treats as "cannot buy" rather than as an untracked debt.
+inline constexpr std::size_t kNoSlot = static_cast<std::size_t>(-1);
+
+std::size_t payable_slot_for(Firm& f, std::size_t preferred, uint32_t seller) {
+    if (f.payable_to[preferred] == seller || f.payable_to[preferred] == NO_FIRM) {
+        return preferred;
+    }
+    for (std::size_t s = 0; s < f.payable_to.size(); ++s) {
+        if (f.payable_to[s] == seller) return s;
+    }
+    for (std::size_t s = 0; s < f.payable_to.size(); ++s) {
+        if (f.payable_to[s] == NO_FIRM) return s;
+    }
+    return kNoSlot;
+}
 
 // The widest set of links any buyer holds: a household's shops, or a firm's
 // suppliers for one input.
@@ -85,7 +111,10 @@ BuyerView view_of(World& w, Buyer b) {
                      f.input_demand[input] / params::kDaysPerMonth,
                      ledger::firm(b.index),
                      &f.input_stock[input],
-                     ledger::Reason::InputPurchase};
+                     ledger::Reason::TradeCreditSettlement,
+                     &f,
+                     input,
+                     base};
 }
 
 }  // namespace
@@ -134,12 +163,47 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
         double affordable = *view.liquidity / f.price;
         double bought = std::min({wanted, f.inventory, affordable});
 
+        std::size_t credit_slot = kNoSlot;
+        if (bought > 0.0 && view.buyer_firm != nullptr) {
+            credit_slot = payable_slot_for(*view.buyer_firm,
+                                           static_cast<std::size_t>(view.slot_base + slot), firm_idx);
+            // Out of payable slots: the bill would be untracked debt, so the
+            // firm does not buy. Unreachable in practice -- there are as many
+            // slots as supplier links.
+            if (credit_slot == kNoSlot) bought = 0.0;
+        }
+
         if (bought > 0.0) {
             // Clamp the cost to available liquidity so floating-point division
             // can never push the buyer slightly negative.
             double cost = std::min(bought * f.price, *view.liquidity);
-            ledger::transfer(w, view.account, ledger::firm(firm_idx), cost,
-                             view.reason, journal);
+
+            if (view.buyer_firm != nullptr) {
+                // Trade credit: no money moves. The bill is firm state on
+                // both sides until month close settles it, which is why
+                // `payables`/`receivables` are not accounts and invariant 1
+                // is untouched here.
+                Firm& b_f = *view.buyer_firm;
+                b_f.payable_to[credit_slot] = firm_idx;
+                b_f.payable_amount[credit_slot] += cost;
+                b_f.payables += cost;
+                f.receivables += cost;
+
+                // Input stock is carried at a moving average cost over
+                // quantity, so the balance sheet values what the firm holds
+                // rather than leaving it at zero. Computed BEFORE the stock
+                // grows, because the old quantity is the weight.
+                const double held = b_f.input_stock[view.input];
+                const double total = held + bought;
+                if (total > 0.0) {
+                    b_f.input_cost_basis[view.input] =
+                        (held * b_f.input_cost_basis[view.input] + cost) / total;
+                }
+            } else {
+                ledger::transfer(w, view.account, ledger::firm(firm_idx), cost,
+                                 view.reason, journal);
+            }
+
             market::record_trade(w, f.good, bought, cost);
             f.inventory -= bought;
             remaining -= bought;

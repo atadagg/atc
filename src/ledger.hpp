@@ -60,7 +60,9 @@ enum class Reason : uint8_t {
     Wage,      // firm -> employee, at month close
     Profit,    // firm -> household, the ownership proxy
     Issuance,  // issuer -> anyone: money entering circulation
-    InputPurchase,  // firm -> firm, a daily input buy
+    // firm -> firm, paying last month's input bills. Input purchases
+    // themselves move no money: they create a payable, settled here.
+    TradeCreditSettlement,
 
     // Sentinel, never a real reason: do not construct an Entry with it and do
     // not tally it. It exists only so kReasonCount cannot drift behind the
