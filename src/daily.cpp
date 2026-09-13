@@ -111,7 +111,10 @@ BuyerView view_of(World& w, Buyer b) {
                      f.input_demand[input] / params::kDaysPerMonth,
                      ledger::firm(b.index),
                      &f.input_stock[input],
-                     ledger::Reason::TradeCreditSettlement,
+                     // A firm's purchase moves no money at all (trade credit),
+                     // so it carries no ledger reason; the default stands
+                     // unused rather than naming a settlement that is not one.
+                     ledger::Reason::Purchase,
                      &f,
                      input,
                      base};
@@ -160,8 +163,16 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
 
         if (f.price <= 0.0) continue;
 
-        double affordable = *view.liquidity / f.price;
-        double bought = std::min({wanted, f.inventory, affordable});
+        // Households pay cash on the spot, so they can only buy what they can
+        // afford. Firms buy on trade credit: no money moves at purchase time,
+        // so a cash cap here would be an undesigned rationing rule -- a firm
+        // at zero cash would starve rather than trade itself into insolvency.
+        // Firm debt is bounded instead by `input_demand`, set at month open
+        // from the firm's own (backward-looking) production plan.
+        double bought = std::min(wanted, f.inventory);
+        if (view.buyer_firm == nullptr) {
+            bought = std::min(bought, *view.liquidity / f.price);
+        }
 
         std::size_t credit_slot = kNoSlot;
         if (bought > 0.0 && view.buyer_firm != nullptr) {
@@ -174,9 +185,15 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
         }
 
         if (bought > 0.0) {
-            // Clamp the cost to available liquidity so floating-point division
-            // can never push the buyer slightly negative.
-            double cost = std::min(bought * f.price, *view.liquidity);
+            // A firm is billed for exactly what it received. The household
+            // clamp below must NOT be applied here: with no cash cap on the
+            // firm path it would silently under-bill the buyer.
+            double cost = bought * f.price;
+            if (view.buyer_firm == nullptr) {
+                // Clamp the cost to available liquidity so floating-point
+                // division can never push the household slightly negative.
+                cost = std::min(cost, *view.liquidity);
+            }
 
             if (view.buyer_firm != nullptr) {
                 // Trade credit: no money moves. The bill is firm state on
@@ -221,7 +238,9 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
             view.unsatisfied[slot] += stock_shortfall;
         }
 
-        if (*view.liquidity <= 0.0) break;
+        // Out of cash, a household is done for the day. A firm is not: it
+        // buys on credit and its budget is `input_demand`, not its balance.
+        if (view.buyer_firm == nullptr && *view.liquidity <= 0.0) break;
     }
     // Any demand still unmet at the end of the day simply vanishes.
 }
@@ -248,11 +267,30 @@ void produce(World& w) {
         }
         if (limit <= 0.0) continue;
 
+        // What this batch cost: the inputs it consumed, at the cost the firm
+        // carries them at, plus a day's share of payroll. Wages are actually
+        // paid at month close, not daily, so the labour term is an accrual
+        // approximation -- one twenty-first of the monthly wage bill.
+        double batch_cost = 0.0;
         for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
             if (g.inputs[s] == NO_GOOD) continue;
-            f.input_stock[s] -= limit * g.input_qty[s];
+            const double consumed = limit * g.input_qty[s];
+            batch_cost += consumed * f.input_cost_basis[s];
+            f.input_stock[s] -= consumed;
             if (f.input_stock[s] < 0.0) f.input_stock[s] = 0.0;
         }
+        batch_cost += f.wage * static_cast<double>(f.employees.size()) / params::kDaysPerMonth;
+
+        // Moving average over quantity, computed BEFORE inventory grows --
+        // the old quantity is the weight. Averaging this way relieves cost
+        // automatically on sale, so there is no separate cost-of-goods-sold
+        // step anywhere.
+        const double unit_cost = limit > 0.0 ? batch_cost / limit : 0.0;
+        const double total = f.inventory + limit;
+        if (total > 0.0) {
+            f.output_cost_basis = (f.inventory * f.output_cost_basis + limit * unit_cost) / total;
+        }
+
         f.inventory += limit;
     }
 }

@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "balance_sheet.hpp"
 #include "daily.hpp"
 #include "goods.hpp"
 #include "market.hpp"
@@ -286,4 +287,105 @@ TEST_CASE("the books balance with trade credit outstanding") {
 
     month_close::settle_trade_credit(w, rng);
     CHECK(w.books_balance() == doctest::Approx(before + 1000.0));
+}
+
+TEST_CASE("a firm with no cash still buys in full and is billed in full") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    w.firms[0].inventory = 100.0;
+    w.firms[0].price = 2.0;
+    w.firms[2].suppliers[0] = 0;
+    w.firms[2].suppliers[1] = NO_FIRM;
+    w.firms[2].suppliers[2] = NO_FIRM;
+    w.firms[2].liquidity = 0.0;  // broke, but trade credit does not care
+    w.firms[2].input_demand[0] = 21.0;  // one unit a day
+
+    daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+
+    // The full daily want, not a cash-rationed slice.
+    CHECK(w.firms[2].input_stock[0] == doctest::Approx(1.0));
+    // Billed for exactly what arrived -- the household cost clamp must not
+    // apply here, or a zero-cash firm would be invoiced zero.
+    CHECK(w.firms[2].payables == doctest::Approx(2.0));
+    CHECK(w.firms[0].receivables == doctest::Approx(2.0));
+    CHECK(w.firms[2].liquidity == doctest::Approx(0.0));
+}
+
+TEST_CASE("a household is still capped by its cash") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    for (uint32_t i = 2; i < 5; ++i) {
+        w.firms[i].inventory = 1000.0;
+        w.firms[i].price = 2.0;
+    }
+    Household& h = w.households[0];
+    h.liquidity = 1.0;
+    h.planned_consumption = 21.0 * 100.0;  // wants far more than it can pay for
+
+    daily::shop(w, 0, rng);
+
+    CHECK(h.liquidity >= 0.0);
+    CHECK(h.liquidity == doctest::Approx(0.0));
+}
+
+TEST_CASE("output cost basis carries input cost plus accrued labour") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    // Labour is a Leontief input too, so the firm keeps its workers; a zero
+    // wage is what isolates the material cost.
+    bread.wage = 0.0;
+    bread.inventory = 0.0;
+    bread.output_cost_basis = 0.0;
+    bread.input_stock[0] = 100.0;
+    bread.input_cost_basis[0] = 2.0;  // ore cost 2/unit
+
+    daily::produce(w);
+
+    // 0.5 ore per bread at 2 each = 1.0 of material per unit, no labour.
+    CHECK(bread.inventory > 0.0);
+    CHECK(bread.output_cost_basis == doctest::Approx(1.0));
+
+    // With workers, a day's share of payroll rides along.
+    World w2 = two_stage_world(rng);
+    Firm& b2 = w2.firms[2];
+    b2.inventory = 0.0;
+    b2.output_cost_basis = 0.0;
+    b2.input_stock[0] = 1000.0;
+    b2.input_cost_basis[0] = 2.0;
+    b2.wage = 21.0;
+    const double made = w2.params.productivity * static_cast<double>(b2.employees.size());
+    REQUIRE(made > 0.0);
+    const double payroll = 21.0 * static_cast<double>(b2.employees.size()) / 21.0;
+
+    daily::produce(w2);
+
+    CHECK(b2.output_cost_basis == doctest::Approx(1.0 + payroll / made));
+}
+
+TEST_CASE("buying inputs on credit and producing does not read as insolvent") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    w.firms[0].inventory = 1000.0;
+    w.firms[0].price = 2.0;
+    Firm& bread = w.firms[2];
+    bread.suppliers[0] = 0;
+    bread.suppliers[1] = NO_FIRM;
+    bread.suppliers[2] = NO_FIRM;
+    bread.liquidity = 0.0;  // the phantom-insolvency setup: no cash at all
+    bread.inventory = 0.0;
+    bread.output_cost_basis = 0.0;
+    bread.wage = 0.0;  // isolate the material chain from accrued wages
+    bread.input_demand[0] = 21.0 * 10.0;
+
+    daily::buy(w, daily::Buyer{daily::BuyerKind::Firm, 2, 0}, rng);
+    REQUIRE(bread.payables > 0.0);
+    daily::produce(w);
+    REQUIRE(bread.inventory > 0.0);
+
+    // The input value moved into finished goods; it did not vanish. Equity is
+    // still zero, not minus the supplier bill.
+    balance_sheet::Sheet s = balance_sheet::of(w, 2);
+    CHECK(s.equity() == doctest::Approx(0.0));
+    CHECK_FALSE(s.insolvent());
 }
