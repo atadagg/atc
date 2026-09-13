@@ -29,6 +29,8 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     consumer.commoditization = 0.0;
     goods.push_back(consumer);
 
+    markets.resize(goods.size());
+
     firms.resize(n_firms);
     households.resize(n_households);
 

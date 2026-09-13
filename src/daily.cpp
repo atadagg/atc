@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "ledger.hpp"
+#include "market.hpp"
 #include "network.hpp"
 #include "params.hpp"
 #include "world.hpp"
@@ -60,6 +61,7 @@ void shop(World& w, uint32_t household, Rng& rng, ledger::Journal* journal) {
             double cost = std::min(bought * f.price, h.liquidity);
             ledger::transfer(w, ledger::household(household), ledger::firm(firm_idx), cost,
                              ledger::Reason::Purchase, journal);
+            market::record_trade(w, f.good, bought, cost);
             f.inventory -= bought;
             remaining -= bought;
         }

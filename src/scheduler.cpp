@@ -4,6 +4,7 @@
 #include "intervention.hpp"
 #include "firm_decisions.hpp"
 #include "household_decisions.hpp"
+#include "market.hpp"
 #include "month_close.hpp"
 #include "params.hpp"
 #include "world.hpp"
@@ -31,6 +32,11 @@ void Scheduler::run_month() {
             intervention::apply(world_, i, journal_);
         }
     }
+
+    // Publish last month's reference prices before any agent decides anything
+    // this month -- firms and households that read it (later work) should see
+    // the same number all month, not one that moves as trades happen.
+    market::publish(world_);
 
     firm_decisions::run_monthly(world_, rng_);
     household_decisions::run_monthly(world_, rng_);

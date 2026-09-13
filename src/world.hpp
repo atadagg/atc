@@ -4,6 +4,7 @@
 
 #include "agents.hpp"
 #include "goods.hpp"
+#include "market.hpp"
 #include "params.hpp"
 #include "rng.hpp"
 
@@ -22,6 +23,9 @@ public:
     // made from labour alone -- which is the economy as it was before goods
     // existed, expressed in the new vocabulary rather than special-cased.
     std::vector<Good> goods;
+
+    // One market per good, index-parallel to `goods`.
+    std::vector<market::GoodMarket> markets;
 
     // Accounts that are allowed to go negative. An issuer's negative balance
     // is not a deficit: it is the money it has issued.
