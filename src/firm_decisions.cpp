@@ -12,8 +12,57 @@
 
 namespace firm_decisions {
 
-double marginal_cost(const Firm& f, const Params& p) {
-    return f.wage / (p.productivity * params::kDaysPerMonth);
+namespace {
+
+// What one unit of good `good` costs the firm, best information first.
+// Returns false only when nothing at all is known -- see the header.
+bool input_unit_cost(const World& w, uint32_t good, double own_basis, double& out) {
+    if (own_basis > 0.0) {  // 1. what this firm has actually paid
+        out = own_basis;
+        return true;
+    }
+    const market::GoodMarket& m = w.markets[good];
+    if (m.has_reference && m.reference_price > 0.0) {  // 2. last month's realised average
+        out = m.reference_price;
+        return true;
+    }
+    // 3. Cold start: no month has traded yet. The posted prices of the firms
+    // that make this good are the only prices in existence. Dead firms keep
+    // their `good`, so `alive` must be tested (CLAUDE.md).
+    double sum = 0.0;
+    uint32_t count = 0;
+    for (const Firm& producer : w.firms) {
+        if (!producer.alive) continue;
+        if (producer.good != good) continue;
+        sum += producer.price;
+        ++count;
+    }
+    if (count == 0) return false;  // nobody makes it; the recipe is unmakeable
+    out = sum / static_cast<double>(count);
+    return true;
+}
+
+}  // namespace
+
+double marginal_cost(const Firm& f, const Params& p, const World* w) {
+    // Kept as one intact subexpression: with labour_per_unit == 1.0 and no
+    // inputs, the multiply by exactly 1.0 and the add of exactly 0.0 are both
+    // exact in IEEE-754, so the legacy single-good economy is bit-identical.
+    const double labour = f.wage / (p.productivity * params::kDaysPerMonth);
+    if (w == nullptr) return labour;
+
+    const Good& g = w->goods[f.good];
+
+    double material = 0.0;
+    for (uint32_t s = 0; s < params::kMaxInputs; ++s) {
+        if (g.inputs[s] == NO_GOOD) continue;
+        if (g.input_qty[s] <= 0.0) continue;
+        double unit = 0.0;
+        if (!input_unit_cost(*w, g.inputs[s], f.input_cost_basis[s], unit)) continue;
+        material += g.input_qty[s] * unit;
+    }
+
+    return labour * g.labour_per_unit + material;
 }
 
 InventoryBand inventory_band(const Firm& f, const Params& p) {
@@ -49,10 +98,10 @@ void adjust_workforce(World& w, uint32_t firm, Rng& rng) {
     }
 }
 
-void adjust_price(Firm& f, const Params& p, Rng& rng) {
+void adjust_price(Firm& f, const Params& p, Rng& rng, const World* w) {
     const InventoryBand band = inventory_band(f, p);
 
-    double mc = marginal_cost(f, p);
+    double mc = marginal_cost(f, p, w);
     double price_floor = p.price_lower_factor * mc;
     double price_cap = p.price_upper_factor * mc;
 
@@ -188,7 +237,7 @@ void run_monthly(World& w, Rng& rng) {
         if (!f.alive) continue;
         adjust_wage(f, w.params, rng);
         adjust_workforce(w, i, rng);
-        adjust_price(f, w.params, rng);
+        adjust_price(f, w.params, rng, &w);
         pull_toward_reference(f, w);
     }
 

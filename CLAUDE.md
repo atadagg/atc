@@ -182,6 +182,22 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
   searches harder. It falls 10% only while unemployed.
 - **Price is gated, not clamped**: raised only while below the cap, lowered only
   while above the floor. Clamping turns a raise into a large cut.
+- **Marginal cost is labour PLUS materials**, and the whole price band derives
+  from it (`price_lower_factor * mc`, `price_upper_factor * mc`). The labour
+  term is `wage / (productivity * 21) * labour_per_unit`; the material term is
+  `sum over recipe slots of input_qty[s] * unit_cost_of_input(s)`, taking the
+  firm's own `input_cost_basis[s]` first, then the good's published
+  `market::GoodMarket::reference_price`, then the mean posted price of that
+  input's *living* producers (a corpse keeps its `good`, so `alive` is tested).
+  This is not a refinement. A labour-only marginal cost puts a downstream
+  firm's price cap *below* its input bill, so the rule forbids it from pricing
+  its way to solvency and its floor licenses a cut to a guaranteed negative
+  margin — measured at chain depth 2, that killed 21-37 of 50 consumer-good
+  firms per seed. Never treat an input the firm knows no price for as free.
+  The legacy single good has `labour_per_unit == 1.0` and no inputs, so the
+  multiply by exactly 1.0 and the add of exactly 0.0 are exact under IEEE-754
+  and the golden hash is unmoved; keep `wage / (productivity * 21)` an intact
+  subexpression rather than re-associating it.
 - **Demand is recorded as *wanted*, not bought**, and telescopes across retry
   visits within a day. That is what makes a stocked-out firm expand. Do not read
   the `demand` series as consumer appetite — it counts one want at several firms.

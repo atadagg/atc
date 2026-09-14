@@ -658,3 +658,118 @@ TEST_CASE("two-stage economy: same seed, byte-identical") {
     };
     CHECK(run() == run());
 }
+
+// --- marginal cost is labour PLUS materials -------------------------------
+//
+// The price band derives from marginal_cost. A labour-only marginal cost put
+// the cap below the input bill, so every downstream firm was forbidden from
+// pricing above what its inputs cost it. See CLAUDE.md.
+
+TEST_CASE("marginal cost includes the material bill at the firm's own cost basis") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    bread.wage = 63.0;
+    bread.input_cost_basis[0] = 2.0;  // paid 2 per unit of ore
+
+    const double labour = 63.0 / (w.params.productivity * params::kDaysPerMonth);
+    // 0.5 ore per bread at 2 each.
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour + 1.0));
+
+    // labour_per_unit scales only the labour term.
+    w.goods[1].labour_per_unit = 3.0;
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour * 3.0 + 1.0));
+}
+
+TEST_CASE("marginal cost falls back to the published reference price") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    bread.wage = 63.0;
+    bread.input_cost_basis[0] = 0.0;  // has never bought
+    w.markets[0].reference_price = 4.0;
+    w.markets[0].has_reference = true;
+
+    const double labour = 63.0 / (w.params.productivity * params::kDaysPerMonth);
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour + 2.0));  // 0.5 ore at 4
+
+    // The firm's own basis, once it has one, outranks the published price.
+    bread.input_cost_basis[0] = 10.0;
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour + 5.0));
+}
+
+TEST_CASE("marginal cost cold-starts on the posted prices of living producers") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    REQUIRE(!w.markets[0].has_reference);  // no month has traded
+    Firm& bread = w.firms[2];
+    bread.wage = 63.0;
+    bread.input_cost_basis[0] = 0.0;
+    w.firms[0].price = 3.0;
+    w.firms[1].price = 5.0;
+
+    const double labour = 63.0 / (w.params.productivity * params::kDaysPerMonth);
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour + 2.0));  // 0.5 ore at the mean of 3 and 5
+
+    // Dead firms keep their `good`; a corpse must not vote on the price.
+    w.firms[1].alive = false;
+    CHECK(firm_decisions::marginal_cost(bread, w.params, &w) ==
+          doctest::Approx(labour + 1.5));  // 0.5 ore at 3
+}
+
+TEST_CASE("the legacy no-input case is bit-identical to labour alone") {
+    Rng rng(5);
+    World w(20, 4, rng);  // the default single-good world: no inputs, lpu 1.0
+    for (double wage : {1.0, 7.5, 29.0, 30.0, 53.7, 63.0, 1234.5}) {
+        Firm& f = w.firms[0];
+        f.wage = wage;
+        const double labour_only = wage / (w.params.productivity * params::kDaysPerMonth);
+        // Exact equality, not Approx: multiplying by labour_per_unit == 1.0
+        // and adding a material bill of exactly 0.0 are both exact in
+        // IEEE-754, which is what keeps the golden hash where it is.
+        CHECK(firm_decisions::marginal_cost(f, w.params, &w) == labour_only);
+        CHECK(firm_decisions::marginal_cost(f, w.params, nullptr) == labour_only);
+    }
+}
+
+TEST_CASE("a downstream firm with expensive inputs can price above its input cost") {
+    Rng rng(5);
+    World w = two_stage_world(rng);
+    Firm& bread = w.firms[2];
+    bread.wage = w.params.min_wage;   // the wage floor: labour contributes ~nothing
+    bread.input_cost_basis[0] = 4.0;  // 0.5 ore per bread = 2.0 of material
+    const double material = 2.0;
+
+    // The floor now sits ABOVE the input bill, so the glut branch can never
+    // cut the firm below what its inputs cost. Under the labour-only rule the
+    // floor was 1.025 * min_wage / 63 -- a guaranteed negative margin.
+    const double mc = firm_decisions::marginal_cost(bread, w.params, &w);
+    CHECK(mc > material);
+    CHECK(w.params.price_lower_factor * mc > material);
+    CHECK(w.params.price_upper_factor * mc > material);
+
+    // Glut branch: 200 months of "inventory far above the band" never take
+    // the price under the material bill.
+    bread.demand_last_month = 1.0;
+    bread.inventory = 1e6;
+    bread.price = w.params.price_upper_factor * mc;
+    for (int i = 0; i < 200; ++i) firm_decisions::adjust_price(bread, w.params, rng, &w);
+    CHECK(bread.price > material);
+
+    // Stockout branch: a firm starting below the cap is allowed to climb
+    // above its input bill rather than being pinned under it.
+    bread.inventory = 0.0;
+    bread.demand_last_month = 1e6;
+    bread.price = material * 0.5;
+    bool rose_above_material = false;
+    for (int i = 0; i < 200; ++i) {
+        firm_decisions::adjust_price(bread, w.params, rng, &w);
+        if (bread.price > material) rose_above_material = true;
+    }
+    CHECK(rose_above_material);
+}
