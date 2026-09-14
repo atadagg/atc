@@ -1,0 +1,18 @@
+# A two-stage economy: ore feeding bread.
+#
+# The chain itself is CLI shape, not an intervention -- the recipe graph is
+# structure, and there is no intervention that rewrites it. So this file is the
+# BEHAVIOUR half of the experiment and must be run with the shape half:
+#
+#   ./build/atc --scenario scenarios/two_stage.scenario --chain 2 \
+#       --burn-in 200 --months 600 --out output/two_stage.csv
+#
+# Firm entry defaults to 0 so the single-good legacy world's draw sequence is
+# untouched by the feature's existence. A multi-good run wants it on: with a
+# chain, a good can be short of producers, and without entry nothing ever
+# answers that shortage. It is switched on at month 0, before any agent acts.
+
+atc-scenario 1
+seed 1
+
+0 set_param firm_entry_prob 0.05

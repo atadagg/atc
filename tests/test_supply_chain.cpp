@@ -3,6 +3,8 @@
 
 #include "doctest.h"
 #include "balance_sheet.hpp"
+#include "golden_hash.hpp"
+#include "scheduler.hpp"
 #include "daily.hpp"
 #include "firm_decisions.hpp"
 #include "goods.hpp"
@@ -623,4 +625,36 @@ TEST_CASE("a cheap stocked-out seller is still visited and still records demand"
     // Sorting empty shelves to the back made this exactly zero: the buyer
     // filled up at the dear stocked seller and broke out of the visit loop.
     CHECK(days_heard > kDays / 2);
+}
+
+TEST_CASE("a two-stage economy runs 120 months with the books balanced") {
+    Rng rng(1);
+    World w = two_stage_world(rng);
+    w.params.firm_entry_prob = 0.05;
+    for (Firm& f : w.firms) f.liquidity = 50.0;
+
+    double before = w.books_balance();
+    Scheduler sched(w, rng);
+    for (int m = 0; m < 120; ++m) sched.run_month();
+
+    CHECK(w.books_balance() == doctest::Approx(before));
+}
+
+TEST_CASE("upstream commoditization exceeds downstream in a running economy") {
+    Rng rng(1);
+    World w = two_stage_world(rng);
+    CHECK(w.goods[0].commoditization > w.goods[1].commoditization);
+    CHECK(w.goods[1].commoditization == doctest::Approx(0.0));
+}
+
+TEST_CASE("two-stage economy: same seed, byte-identical") {
+    auto run = []() {
+        Rng rng(3);
+        World w = two_stage_world(rng);
+        w.params.firm_entry_prob = 0.05;
+        Scheduler sched(w, rng);
+        for (int m = 0; m < 60; ++m) sched.run_month();
+        return golden::run_hash(w);
+    };
+    CHECK(run() == run());
 }

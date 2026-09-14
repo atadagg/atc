@@ -22,6 +22,10 @@ cmake -S . -B build && cmake --build build -j     # Release by default; builds a
 ./build/atc_tests
 ./build/atc --seed 1 --burn-in 1000 --months 6000 --out output/run.csv
 ./build/atc --scenario scenarios/stimulus.scenario --out output/s.csv
+
+# A multi-good run: a linear chain of `depth` goods, firms spread evenly over
+# them, good 0 the raw material and good depth-1 the consumer good.
+./build/atc --seed 1 --chain 3 --burn-in 200 --months 600 --out output/chain.csv
 ./build/atc_viewer
 
 ./build/atc --identity-sheet output/marks.svg --identity-count 256 \
@@ -48,7 +52,11 @@ environment claims before repeating them.)
 | `world.{hpp,cpp}` | The agent arrays and the issuer accounts; `money_in_circulation()` (a measurement) and `books_balance()` (an assertion) |
 | `ledger.{hpp,cpp}` | `transfer` — the only code allowed to write a balance; `Journal`, `Entry`, `Reason`; `MonthFlows` + `SummaryJournal` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
-| `network.{hpp,cpp}` | Household↔firm links (employment, shop connections) |
+| `network.{hpp,cpp}` | Household↔firm links (employment, shop connections), and firm↔supplier links |
+| `goods.{hpp,cpp}` | The recipe graph. `Good`, `NO_GOOD`; `remove` and `commoditization` derived from the graph, never authored |
+| `market.{hpp,cpp}` | One published reference price per good — a measurement of what traded, not a clearing price |
+| `balance_sheet.{hpp,cpp}` | A firm's position, computed from firm state. Equity is never stored |
+| `firm_lifecycle.{hpp,cpp}` | Insolvency, liquidation with the write-off cascade resolved to a fixed point, and firm entry |
 | `firm_decisions.{hpp,cpp}` | Monthly: wage, hire/fire, price |
 | `household_decisions.{hpp,cpp}` | Monthly: shop search, job search, consumption budget |
 | `daily.{hpp,cpp}` | Daily: shopping, then production |
@@ -118,8 +126,15 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
    Issuer accounts may go negative freely — that negative number is what they
    have issued.
 
-   If the books ever fail to balance, that is the highest-priority bug. Do not
-   loosen a tolerance to hide it.
+   `transfer` rounds its subtraction and its addition independently, so a
+   movement is exact *in its pairing* but the books are not bit-exact as a
+   *sum* across many movements: 7.1e-15 of drift has been measured on a long
+   run, and `scripts/ensemble.py` reports ~2e-9 of spread over 7000 months.
+   Conservation assertions therefore take a tolerance, and `books_balance()`
+   is compared with `doctest::Approx`, never with `==`.
+
+   Real drift is still the highest-priority bug. The tolerance is for the last
+   bits of a double; do not widen it to cover anything larger.
 
 2. **Determinism.** Same seed → byte-identical run, including randomised agent
    order. All randomness flows through an explicitly passed `Rng&`. No `rand()`,
@@ -176,6 +191,23 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
   (`random_unconnected_firm`) because it applies no price test, and a weighting
   there is unopposed. Unifying them once concentrated two thirds of the economy
   into dead firms. Do not unify them.
+- **Leontief production, with no substitution.** Short of iron, extra fibre does
+  not help: output is the *minimum* over labour capacity and each input's stock
+  divided by its recipe quantity. That is deliberate — it is what makes a
+  stockout travel *up* the chain instead of being absorbed by the first firm
+  that hits it. Do not average the inputs or add an elasticity.
+- **`Good::remove` is the LONGEST path to a consumer good, not the shortest.**
+  A good that feeds both bread and a four-deep chain is measured by the four,
+  because the distance that matters is the distance over which a producer's
+  choices stop being visible to anyone. Counting from the consumer end also
+  puts today's single good at 0, so the legacy economy needs no exception.
+- **Liquidation routes a dead firm's residual cash to the issuer.** That is a
+  NAMED PLACEHOLDER, not the intended economics: with no shareholders there is
+  nobody to receive it, and deleting it would break invariant 1. When ownership
+  exists, this is the line that changes.
+- **A dying firm collects what it is owed before it pays what it owes.** Its
+  receivables are pulled in first, then its creditors are paid out of the
+  total. The other order writes off money that existed.
 - Firms do not optimise, forecast, or maximise profit. That is the design.
 
 ## Things worth knowing before you measure anything
@@ -204,8 +236,10 @@ Real, judged not worth fixing yet. Reconsider when touching that code.
 - `household_decisions::run_monthly` has no direct test.
 - Per-day `vector + iota + shuffle` allocates ~147k times per run. Irrelevant at
   1k agents.
-- `month_close::run` takes no `Rng&`. Anything that moves money at month close
-  will need one.
+- An idle firm with cash, unsold stock and no payables has equity >= 0 *by
+  construction* (equity is a sum of non-negative terms once payables are zero),
+  so it can never test insolvent. A zombie entrant that never trades therefore
+  cannot die, and holds a slot under the per-good entry cap forever.
 - `draw_cell`'s `col == 0` special case is a schema fact living in the panel —
   reordering columns would silently move row selection.
 - `panel_agents.cpp` looks fields up by label string; a typo would print `0`

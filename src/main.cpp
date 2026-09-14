@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "goods.hpp"
 #include "params.hpp"
 #include "ledger.hpp"
 #include "recorder.hpp"
@@ -31,6 +32,51 @@ std::optional<long> parse_long(std::string_view s) {
     return value;
 }
 
+// Builds a linear production chain of `depth` goods in place of the single
+// consumer good a fresh World starts with, and spreads the firms evenly over
+// them. Good 0 is the deepest raw material, good depth-1 the consumer good:
+//
+//     good 0 (raw) -> good 1 -> ... -> good depth-1 (consumer)
+//
+// Households' shop links were wired at construction, when every firm made the
+// one consumer good. They are re-pointed at consumer-good producers here --
+// otherwise households would try to buy iron ore for dinner.
+void build_chain(World& w, uint32_t depth) {
+    const uint32_t n_firms = static_cast<uint32_t>(w.firms.size());
+
+    w.goods.assign(depth, Good{});
+    for (uint32_t g = 0; g < depth; ++g) {
+        Good& good = w.goods[g];
+        good.inputs.fill(NO_GOOD);
+        good.input_qty.fill(0.0);
+        good.labour_per_unit = 1.0;
+        good.consumer = (g + 1 == depth);
+        if (g > 0) {
+            good.inputs[0] = g - 1;
+            good.input_qty[0] = 0.5;
+        }
+    }
+    goods::recompute(w.goods, w.params.commoditization_k);
+    w.markets.assign(w.goods.size(), market::GoodMarket{});
+
+    // Evenly, and contiguously, so the consumer-good producers are the top
+    // block and the shop re-pointing below is a single range.
+    for (uint32_t i = 0; i < n_firms; ++i) {
+        w.firms[i].good = static_cast<uint32_t>(static_cast<uint64_t>(i) * depth / n_firms);
+    }
+
+    uint32_t first_consumer = n_firms;
+    for (uint32_t i = 0; i < n_firms; ++i) {
+        if (w.firms[i].good + 1 == depth) { first_consumer = i; break; }
+    }
+    const uint32_t n_consumer = n_firms - first_consumer;
+    for (Household& h : w.households) {
+        for (uint32_t s = 0; s < params::kShopsPerHousehold; ++s) {
+            h.shops[s] = first_consumer + (h.shops[s] % n_consumer);
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -48,6 +94,7 @@ int main(int argc, char** argv) {
     std::string identity_sheet;
     uint32_t identity_count = 256;
     identity::Locale identity_locale = identity::Locale::Turkish;
+    uint32_t chain_depth = 1;
 
     for (int i = 1; i < argc; i += 2) {
         std::string_view flag(argv[i]);
@@ -112,6 +159,14 @@ int main(int argc, char** argv) {
                 std::println(stderr, "error: unknown locale '{}'", value);
                 return 1;
             }
+        } else if (flag == "--chain") {
+            auto v = parse_long(value);
+            if (!v || *v < 1 || *v > 8) {
+                std::println(stderr,
+                             "error: --chain expects a depth in [1, 8], got '{}'", value);
+                return 1;
+            }
+            chain_depth = static_cast<uint32_t>(*v);
         } else if (flag == "--journal") {
             journal_path = std::string(value);
         } else if (flag == "--journal-months") {
@@ -169,6 +224,11 @@ int main(int argc, char** argv) {
 
     Rng rng(seed);
     World world(params::kNumHouseholds, params::kNumFirms, rng);
+    if (chain_depth > 1) {
+        build_chain(world, chain_depth);
+        std::println("chain depth={} (good 0 raw ... good {} consumer)",
+                     chain_depth, chain_depth - 1);
+    }
     Scheduler scheduler(world, rng);
     if (!scenario.log.empty()) scheduler.set_interventions(&scenario.log);
 
