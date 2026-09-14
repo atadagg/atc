@@ -69,6 +69,16 @@ void build_chain(World& w, uint32_t depth) {
     for (uint32_t i = 0; i < n_firms; ++i) {
         if (w.firms[i].good + 1 == depth) { first_consumer = i; break; }
     }
+    // Unreachable at the CLI's own limits (100 firms, depth <= 8: the evenly
+    // spread assignment above always lands at least one firm on every good),
+    // but the division below is unguarded, so a future change to either
+    // limit would turn "no firm makes the consumer good" into a crash
+    // (modulo by zero) instead of a message.
+    if (first_consumer == n_firms) {
+        throw std::invalid_argument(
+            "build_chain: no firm produces the consumer good (depth "
+            + std::to_string(depth) + ", " + std::to_string(n_firms) + " firms)");
+    }
     const uint32_t n_consumer = n_firms - first_consumer;
     for (Household& h : w.households) {
         for (uint32_t s = 0; s < params::kShopsPerHousehold; ++s) {
@@ -225,7 +235,12 @@ int main(int argc, char** argv) {
     Rng rng(seed);
     World world(params::kNumHouseholds, params::kNumFirms, rng);
     if (chain_depth > 1) {
-        build_chain(world, chain_depth);
+        try {
+            build_chain(world, chain_depth);
+        } catch (const std::invalid_argument& e) {
+            std::println(stderr, "error: {}", e.what());
+            return 1;
+        }
         std::println("chain depth={} (good 0 raw ... good {} consumer)",
                      chain_depth, chain_depth - 1);
     }

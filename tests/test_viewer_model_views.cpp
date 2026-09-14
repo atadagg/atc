@@ -30,6 +30,47 @@ TEST_CASE("only firm distributions are pinnable") {
     }
 }
 
+TEST_CASE("a dead firm is excluded from every firm distribution") {
+    Rng rng(1);
+    World w(3, 3, rng);
+    w.firms[0].wage = 1.0;
+    w.firms[1].wage = 2.0;
+    w.firms[2].wage = 3.0;
+    w.firms[1].alive = false;
+
+    const auto specs = distributions();
+    for (int i = 0; i < static_cast<int>(specs.size()); ++i) {
+        if (specs[static_cast<size_t>(i)].over != AgentKind::Firm) continue;
+        const std::vector<double> v = dist_values(w, i);
+        const std::vector<uint32_t> idx = dist_indices(w, i);
+        REQUIRE(v.size() == 2);
+        REQUIRE(idx.size() == 2);
+        // The corpse (firm 1) never appears, and the survivors keep their
+        // real indices.
+        CHECK(idx[0] == 0u);
+        CHECK(idx[1] == 2u);
+    }
+}
+
+TEST_CASE("dist_indices maps a Histogram's members back to real firm indices "
+          "once a firm has died") {
+    Rng rng(1);
+    World w(3, 3, rng);
+    w.firms[0].wage = 0.0;
+    w.firms[1].wage = 0.0;  // dead: must not appear in either vector
+    w.firms[2].wage = 10.0;
+    w.firms[1].alive = false;
+
+    const std::vector<double> wages = dist_values(w, 0);
+    const std::vector<uint32_t> idx = dist_indices(w, 0);
+    REQUIRE(wages.size() == 2);
+    const Histogram h = bin(wages, 2);
+    REQUIRE(h.members.front().size() == 1);
+    CHECK(idx[h.members.front()[0]] == 0u);  // living firm 0, at wage 0.0
+    REQUIRE(h.members.back().size() == 1);
+    CHECK(idx[h.members.back()[0]] == 2u);  // living firm 2, at wage 10.0
+}
+
 TEST_CASE("a distribution's bin members index back into the agent array") {
     Rng rng(1);
     World w(3, 3, rng);

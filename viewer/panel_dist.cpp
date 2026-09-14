@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 #include "app.hpp"
@@ -9,9 +10,11 @@
 namespace {
 
 // Draws one distribution. `over_firms` decides whether a bin click pins the
-// firm table to that bin's members.
+// firm table to that bin's members. `indices` maps each `values` position
+// back to a real agent index (model_dist.hpp) -- required because dead firms
+// are excluded from `values`, so position no longer equals firm index.
 void draw_one(App& app, const char* name, const std::vector<double>& values,
-              int bins, bool over_firms) {
+              const std::vector<uint32_t>& indices, int bins, bool over_firms) {
     const Histogram h = bin(values, bins);
 
     int max_count = 1;
@@ -36,7 +39,10 @@ void draw_one(App& app, const char* name, const std::vector<double>& values,
         const float height = 80.0f;
         ImGui::Dummy(ImVec2(w, height * (1.0f - frac)));
         if (ImGui::Button(id, ImVec2(w, height * frac + 1.0f)) && over_firms) {
-            app.filters.pinned_firms = h.members[b];
+            std::vector<uint32_t> pinned;
+            pinned.reserve(h.members[b].size());
+            for (uint32_t pos : h.members[b]) pinned.push_back(indices[pos]);
+            app.filters.pinned_firms = std::move(pinned);
         }
         ImGui::EndGroup();
         if (ImGui::IsItemHovered()) {
@@ -65,7 +71,7 @@ void draw_dist_panel(App& app) {
     const auto specs = distributions();
     for (int i = 0; i < static_cast<int>(specs.size()); ++i) {
         const DistSpec& s = specs[static_cast<size_t>(i)];
-        draw_one(app, s.name, dist_values(w, i), effective_bins, s.pinnable);
+        draw_one(app, s.name, dist_values(w, i), dist_indices(w, i), effective_bins, s.pinnable);
     }
 
     ImGui::End();

@@ -12,6 +12,14 @@
 void Scheduler::settle_vacancy_bookkeeping() {
     // Called after job search: a vacancy still open was not filled.
     for (auto& f : world_.firms) {
+        // liquidate() clears has_open_vacancy to false and never sets it
+        // again, so without this a corpse falls into the "fully staffed"
+        // branch below every month for the rest of the run and
+        // months_fully_staffed climbs without bound. Inert today because
+        // adjust_wage() also skips the dead, but it is the same class of bug
+        // as the viewer showing a corpse's stale numbers: bookkeeping that
+        // keeps running past death.
+        if (!f.alive) continue;
         f.vacancy_went_unfilled = f.has_open_vacancy;
         if (f.has_open_vacancy) {
             f.months_fully_staffed = 0;

@@ -79,6 +79,11 @@ void record_flows(Metrics& m, const ledger::MonthFlows& f, double discrepancy) {
     m.flow_wage = f.by_reason[ledger::reason_index(ledger::Reason::Wage)];
     m.flow_profit = f.by_reason[ledger::reason_index(ledger::Reason::Profit)];
     m.flow_issuance = f.by_reason[ledger::reason_index(ledger::Reason::Issuance)];
+    m.flow_trade_credit_settlement =
+        f.by_reason[ledger::reason_index(ledger::Reason::TradeCreditSettlement)];
+    m.flow_firm_liquidation =
+        f.by_reason[ledger::reason_index(ledger::Reason::FirmLiquidation)];
+    m.flow_firm_founding = f.by_reason[ledger::reason_index(ledger::Reason::FirmFounding)];
     m.flow_discrepancy = discrepancy;
 }
 
@@ -90,7 +95,9 @@ CsvRecorder::CsvRecorder(const std::string& path) : out_(path) {
     out_ << "month,unemployment_rate,mean_price,mean_wage,"
             "daily_capacity,vacancies,gini,total_money,"
             "demand,planned_consumption,inventory,household_liquidity,"
-            "flow_purchase,flow_wage,flow_profit,flow_issuance,flow_discrepancy\n";
+            "flow_purchase,flow_wage,flow_profit,flow_issuance,"
+            "flow_trade_credit_settlement,flow_firm_liquidation,flow_firm_founding,"
+            "flow_discrepancy\n";
 }
 
 void CsvRecorder::record(const Metrics& m) {
@@ -100,7 +107,8 @@ void CsvRecorder::record(const Metrics& m) {
          << m.planned_consumption << ',' << m.inventory << ','
          << m.household_liquidity << ',' << m.flow_purchase << ','
          << m.flow_wage << ',' << m.flow_profit << ',' << m.flow_issuance << ','
-         << m.flow_discrepancy << '\n';
+         << m.flow_trade_credit_settlement << ',' << m.flow_firm_liquidation << ','
+         << m.flow_firm_founding << ',' << m.flow_discrepancy << '\n';
 }
 
 namespace {

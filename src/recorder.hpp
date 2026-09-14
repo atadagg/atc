@@ -40,6 +40,16 @@ struct Metrics {
     double flow_wage = 0.0;
     double flow_profit = 0.0;
     double flow_issuance = 0.0;
+    // The supply chain's three reasons: firm -> firm trade credit settling at
+    // month close, a dying firm's payout to creditors then the issuer, and
+    // the issuer's opening capital for a newly founded firm. None of these
+    // touch a household account, so flow_discrepancy (household-only)
+    // reconciles whether or not they are recorded here -- but a reason that
+    // moves real money and appears in no CSV column is a silent gap in what
+    // this file claims to cover, not a balanced book.
+    double flow_trade_credit_settlement = 0.0;
+    double flow_firm_liquidation = 0.0;
+    double flow_firm_founding = 0.0;
     // Net household receipts less the change in the household stock. Zero to
     // machine precision unless a movement escaped the journal; recorded rather
     // than merely asserted so the size of the crumb stays watchable.

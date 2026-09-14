@@ -35,6 +35,21 @@ constexpr ColumnSpec kHouseholdColumns[] = {
 };
 
 bool firm_passes(const Filters& f, uint32_t i, const Firm& firm, double min_wage) {
+    // A dead firm stays in the array forever (invariant 3: indices, not
+    // erasure) with a wage, price, inventory and liquidity that are stale,
+    // not current -- liquidate() clears its books but leaves the numbers
+    // standing. Listing it as an ordinary row would print those stale
+    // numbers next to living firms with no indication anything changed,
+    // exactly the silent-corpse trap CLAUDE.md calls out for averages
+    // (recorder.cpp excludes the dead from mean_price/mean_wage the same
+    // way). The firm table hides corpses outright rather than marking them
+    // in place: unlike an unemployed household, which is still an active
+    // agent worth listing, a dead firm has nothing left to report and would
+    // otherwise accumulate without bound as firm entry keeps growing
+    // w.firms.size(). A corpse remains reachable through firm_detail() (via
+    // a link, or a pin taken before it died), which does mark it dead -- see
+    // the "alive" field there.
+    if (!firm.alive) return false;
     if (!f.pinned_firms.empty() &&
         std::find(f.pinned_firms.begin(), f.pinned_firms.end(), i) == f.pinned_firms.end()) {
         return false;
@@ -132,6 +147,12 @@ DetailModel firm_detail(const World& w, uint32_t firm) {
     d.id = firm;
     d.fields = {
         {"identity", identity_cell(firm)},
+        // Surfaced first and unconditionally: a corpse is hidden from the
+        // firm table (firm_passes above) but stays reachable through a link
+        // -- a household's stale shop slot, or a pin taken before this firm
+        // died. Without this field the detail view would show that corpse's
+        // frozen wage/price/inventory with nothing to say they are frozen.
+        {"alive", flag_cell(f.alive)},
         {"wage", number_cell(f.wage, 4)},
         {"price", number_cell(f.price, 4)},
         {"inventory", number_cell(f.inventory, 3)},

@@ -20,6 +20,15 @@ void replace_shop(World& w, uint32_t household, uint32_t slot, uint32_t new_firm
 
 bool has_shop(const Household& h, uint32_t firm);
 
+// The good a household shops for. This ASSUMES exactly one consumer good in
+// the world, which is what the supply chain currently builds; the first one
+// found wins, so a world with two consumer goods would route every household
+// to whichever has the lower index. Households choosing between consumer
+// goods is a later piece of work. NO_GOOD means "no consumer good declared",
+// in which case a caller that filters on it should pass everything -- the
+// pre-supply-chain behaviour.
+uint32_t consumer_good(const World& w);
+
 // Draw a firm the household does not already shop at, with probability
 // proportional to firm size in employees. Firms with zero employees are
 // still reachable (weight 1) so they are not permanently excluded.

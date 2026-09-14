@@ -32,20 +32,14 @@ bool has_shop(const Household& h, uint32_t firm) {
     return std::find(h.shops.begin(), h.shops.end(), firm) != h.shops.end();
 }
 
-namespace {
-
-// The good a household shops for. This ASSUMES exactly one consumer good in
-// the world, which is what the supply chain currently builds; the first one
-// found wins, so a world with two consumer goods would route every household
-// to whichever has the lower index. Households choosing between consumer goods
-// is a later piece of work. NO_GOOD means "no consumer good declared", in
-// which case the filter passes everything -- the pre-supply-chain behaviour.
 uint32_t consumer_good(const World& w) {
     for (uint32_t g = 0; g < w.goods.size(); ++g) {
         if (w.goods[g].consumer) return g;
     }
     return NO_GOOD;
 }
+
+namespace {
 
 // Shared PREDICATE for the two household draws. Only the predicate is shared;
 // the draws themselves stay apart on purpose (one size-weighted, one flat).

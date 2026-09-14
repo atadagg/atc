@@ -117,6 +117,50 @@ TEST_CASE("pinned firms restrict the table to that set") {
     CHECK(rows[1] == 2u);
 }
 
+TEST_CASE("a dead firm is hidden from the firm table entirely") {
+    World w = tiny_world();
+    w.firms[1].alive = false;
+
+    const std::vector<uint32_t> rows = firm_rows(w, Filters{}, SortSpec{});
+    REQUIRE(rows.size() == 2);
+    CHECK(rows[0] == 0u);
+    CHECK(rows[1] == 2u);
+}
+
+TEST_CASE("a dead, pinned firm still does not appear -- death overrides a pin") {
+    World w = tiny_world();
+    w.firms[1].alive = false;
+
+    Filters pinned;
+    pinned.pinned_firms = {1u};
+    const std::vector<uint32_t> rows = firm_rows(w, pinned, SortSpec{});
+    CHECK(rows.empty());
+}
+
+TEST_CASE("firm_detail marks whether the firm is alive") {
+    World w = tiny_world();
+    const DetailModel living = firm_detail(w, 0u);
+    REQUIRE(living.present);
+    bool found_alive_field = false;
+    for (const auto& field : living.fields) {
+        if (std::strcmp(field.label, "alive") == 0) {
+            found_alive_field = true;
+            CHECK(field.value.kind == CellKind::Flag);
+            CHECK(field.value.number == 1.0);
+        }
+    }
+    CHECK(found_alive_field);
+
+    w.firms[0].alive = false;
+    const DetailModel dead = firm_detail(w, 0u);
+    REQUIRE(dead.present);
+    for (const auto& field : dead.fields) {
+        if (std::strcmp(field.label, "alive") == 0) {
+            CHECK(field.value.number == 0.0);
+        }
+    }
+}
+
 TEST_CASE("sorting works in both directions on a numeric column") {
     const World w = tiny_world();
     const int wage_col = firm_col("wage");

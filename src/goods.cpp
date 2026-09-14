@@ -1,7 +1,6 @@
 #include "goods.hpp"
 
 #include <cmath>
-#include <limits>
 #include <stdexcept>
 
 namespace goods {

@@ -219,6 +219,9 @@ TEST_CASE("record_flows maps each Reason onto its metrics column") {
     f.by_reason[ledger::reason_index(ledger::Reason::Wage)] = 22.0;
     f.by_reason[ledger::reason_index(ledger::Reason::Profit)] = 33.0;
     f.by_reason[ledger::reason_index(ledger::Reason::Issuance)] = 44.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::TradeCreditSettlement)] = 55.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::FirmLiquidation)] = 66.0;
+    f.by_reason[ledger::reason_index(ledger::Reason::FirmFounding)] = 77.0;
 
     Metrics m;
     record_flows(m, f, -0.5);
@@ -227,5 +230,25 @@ TEST_CASE("record_flows maps each Reason onto its metrics column") {
     CHECK(m.flow_wage == doctest::Approx(22.0));
     CHECK(m.flow_profit == doctest::Approx(33.0));
     CHECK(m.flow_issuance == doctest::Approx(44.0));
+    CHECK(m.flow_trade_credit_settlement == doctest::Approx(55.0));
+    CHECK(m.flow_firm_liquidation == doctest::Approx(66.0));
+    CHECK(m.flow_firm_founding == doctest::Approx(77.0));
     CHECK(m.flow_discrepancy == doctest::Approx(-0.5));
+}
+
+TEST_CASE("the csv header spans every Reason that moves money") {
+    const std::string path = "test_header_columns.csv";
+    std::remove(path.c_str());
+    { CsvRecorder rec(path); }
+
+    std::ifstream in(path);
+    REQUIRE(in.good());
+    std::string header;
+    std::getline(in, header);
+    for (const char* col : {"flow_purchase", "flow_wage", "flow_profit", "flow_issuance",
+                            "flow_trade_credit_settlement", "flow_firm_liquidation",
+                            "flow_firm_founding", "flow_discrepancy"}) {
+        CHECK(header.find(col) != std::string::npos);
+    }
+    std::remove(path.c_str());
 }

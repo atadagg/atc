@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 #include "params.hpp"
 
@@ -31,8 +32,6 @@ struct Good {
     // unchanged.
     double commoditization = 0.0;
 };
-
-#include <vector>
 
 namespace goods {
 

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "firm_lifecycle.hpp"
 #include "ledger.hpp"
 #include "scheduler.hpp"
 #include "world.hpp"
@@ -223,6 +224,27 @@ TEST_CASE("the journal can be attached and detached mid-run") {
     s.set_journal(nullptr);
     s.run_month();
     CHECK(j.entries.size() == after_one);
+}
+
+TEST_CASE("a dead firm's vacancy bookkeeping stops, it does not keep "
+          "accumulating months_fully_staffed") {
+    Rng rng(1);
+    World w(params::kNumHouseholds, params::kNumFirms, rng);
+    Scheduler s(w, rng);
+
+    firm_lifecycle::liquidate(w, 0);
+    REQUIRE_FALSE(w.firms[0].alive);
+    const uint32_t frozen = w.firms[0].months_fully_staffed;
+
+    for (int i = 0; i < 5; ++i) {
+        s.run_month();
+        // has_open_vacancy is cleared to false by liquidate() and never set
+        // again, so without the alive guard in settle_vacancy_bookkeeping()
+        // this would fall into the "fully staffed" branch and climb by one
+        // every month for the rest of the run.
+        CHECK(w.firms[0].months_fully_staffed == frozen);
+        CHECK_FALSE(w.firms[0].alive);
+    }
 }
 
 TEST_CASE("no balance goes negative over a run") {

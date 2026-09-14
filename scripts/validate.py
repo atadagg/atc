@@ -70,11 +70,15 @@ def load(path):
                 "gini": float(row["gini"]),
                 "total_money": float(row["total_money"]),
             }
-            # Flow columns arrived after the criteria columns did. A CSV
-            # written before them still loads; the nominal series are simply
-            # absent from `compute` rather than silently reported as zero.
+            # Flow columns arrived after the criteria columns did, and the
+            # supply-chain reasons (trade credit settlement, firm liquidation,
+            # firm founding) after that. A CSV written before any of them
+            # still loads; columns it lacks are simply absent from `compute`
+            # rather than silently reported as zero.
             for col in ("flow_purchase", "flow_wage", "flow_profit",
-                        "flow_issuance", "flow_discrepancy"):
+                        "flow_issuance", "flow_trade_credit_settlement",
+                        "flow_firm_liquidation", "flow_firm_founding",
+                        "flow_discrepancy"):
                 if col in row:
                     r[col] = float(row[col])
             rows.append(r)

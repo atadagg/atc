@@ -106,20 +106,22 @@ BuyerView view_of(World& w, Buyer b) {
     if (input == params::kMaxInputs) return none;
 
     const uint32_t base = input * params::kSuppliersPerInput;
-    return BuyerView{&f.liquidity,
-                     f.suppliers.data() + base,
-                     f.input_unsatisfied.data() + base,
-                     params::kSuppliersPerInput,
-                     f.input_demand[input] / params::kDaysPerMonth,
-                     ledger::firm(b.index),
-                     &f.input_stock[input],
-                     // A firm's purchase moves no money at all (trade credit),
-                     // so it carries no ledger reason; the default stands
-                     // unused rather than naming a settlement that is not one.
-                     ledger::Reason::Purchase,
-                     &f,
-                     input,
-                     base};
+    return BuyerView{
+        .liquidity = &f.liquidity,
+        .links = f.suppliers.data() + base,
+        .unsatisfied = f.input_unsatisfied.data() + base,
+        .link_count = params::kSuppliersPerInput,
+        .daily_target = f.input_demand[input] / params::kDaysPerMonth,
+        .account = ledger::firm(b.index),
+        .stock = &f.input_stock[input],
+        // `.reason` is left at its default (Purchase) deliberately, not
+        // spelled out here: a firm's purchase moves no money at all (trade
+        // credit -- see `buy()`'s buyer_firm branch), so this field is never
+        // read on the firm path. There is no settlement reason to name.
+        .buyer_firm = &f,
+        .input = input,
+        .slot_base = base,
+    };
 }
 
 }  // namespace
@@ -309,7 +311,14 @@ void buy(World& w, Buyer b, Rng& rng, ledger::Journal* journal) {
 }
 
 void shop(World& w, uint32_t household, Rng& rng, ledger::Journal* journal) {
-    buy(w, Buyer{BuyerKind::Household, household, 0}, rng, journal);
+    // The actual consumer good, not a hardcoded 0: under `--chain N` the
+    // consumer good is N-1. Provably no behaviour change either way --
+    // view_of()'s household branch never reads `Buyer::good` (it returns
+    // before touching it), and buy() only reads it on the firm path
+    // (view.buyer_firm != nullptr, always null here) -- but a Buyer that
+    // names the wrong good is a landmine for the next reader who assumes the
+    // field is trustworthy.
+    buy(w, Buyer{BuyerKind::Household, household, network::consumer_good(w)}, rng, journal);
 }
 
 void produce(World& w) {
