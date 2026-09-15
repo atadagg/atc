@@ -5,6 +5,7 @@
 #include "world.hpp"
 #include "params.hpp"
 #include "firm_decisions.hpp"
+#include "balance_sheet.hpp"
 
 TEST_CASE("wages move money from firms to their employees") {
     Rng rng(1);
@@ -300,4 +301,34 @@ TEST_CASE("a long run does not abort on a negative distribution remainder"
             for (int m = 0; m < 400; ++m) s.run_month();
         }());
     }
+}
+
+// Regression: distribute_profits computed `profit = liquidity - buffer` with
+// no reference to what the firm owed, so a firm holding cash earmarked for a
+// supplier bill paid that cash out as profit and was insolvent by the time
+// firm_lifecycle::run_deaths looked at it -- an insolvency the distribution
+// itself created. Safe by accident before trade credit existed (payables were
+// always zero, so equity was a sum of non-negative terms; see
+// balance_sheet.hpp), fatal the moment firms bought from firms: it emptied
+// the middle of a supply chain within a dozen months.
+TEST_CASE("a firm does not distribute cash it owes its suppliers") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    for (auto& h : w.households) h.liquidity = 1.0;
+
+    Firm& f = w.firms[0];
+    f.wage = 0.0;            // no wage bill, so the buffer is zero
+    f.liquidity = 500.0;
+    f.payables = 400.0;      // owed to a supplier, settling next month close
+    f.inventory = 0.0;
+    f.output_cost_basis = 0.0;
+
+    const double before = w.books_balance();
+    month_close::distribute_profits(w);
+
+    CHECK(w.books_balance() == doctest::Approx(before));
+    // The debt stays funded: only the 100 above it is distributable.
+    CHECK(f.liquidity == doctest::Approx(400.0));
+    CHECK(balance_sheet::of(w, 0).equity() == doctest::Approx(0.0));
+    CHECK_FALSE(balance_sheet::of(w, 0).insolvent());
 }

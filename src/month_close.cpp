@@ -184,7 +184,8 @@ void distribute_profits(World& w, ledger::Journal* journal) {
         if (!f.alive) continue;
         double wage_bill = f.wage * static_cast<double>(f.employees.size());
         double buffer = w.params.buffer_factor * wage_bill;
-        double profit = f.liquidity - buffer;
+        const double retain = buffer + f.payables;
+        double profit = f.liquidity - retain;
         if (profit <= 0.0) continue;
 
         // As in pay_wages: the last recipient takes the exact remainder, so
@@ -204,7 +205,7 @@ void distribute_profits(World& w, ledger::Journal* journal) {
             const bool last = (i + 1 == w.households.size());
             double want;
             if (last) {
-                want = f.liquidity - buffer;
+                want = f.liquidity - retain;
             } else if (total_household_liquidity <= 0.0) {
                 // Degenerate case: split evenly rather than destroying money.
                 want = even_share;
@@ -212,10 +213,10 @@ void distribute_profits(World& w, ledger::Journal* journal) {
                 want = profit * (initial_liquidity[i] / total_household_liquidity);
             }
             ledger::transfer(w, ledger::firm(fi), ledger::household(i),
-                             capped_payment(want, f.liquidity - buffer),
+                             capped_payment(want, f.liquidity - retain),
                              ledger::Reason::Profit, journal);
         }
-        check_landed_on_target(f.liquidity, buffer, "distribute_profits");
+        check_landed_on_target(f.liquidity, retain, "distribute_profits");
     }
 }
 
