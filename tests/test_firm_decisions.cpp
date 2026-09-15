@@ -3,6 +3,8 @@
 #include "network.hpp"
 #include "world.hpp"
 #include "params.hpp"
+#include "goods.hpp"
+#include "market.hpp"
 
 // The published calibration, as defaults. These tests exercise the rules, not
 // the parameter plumbing -- test_params.cpp covers that.
@@ -331,4 +333,40 @@ TEST_CASE("partial commoditization moves the price part of the way") {
         CHECK(f.price > 1.0);
         CHECK(f.price < 3.0);
     }
+}
+
+// Regression: adjust_workforce opened a vacancy on low inventory alone. That
+// is right when labour is the only constraint -- the whole single-good world
+// -- but wrong under Leontief production, where a firm short of MATERIALS
+// gains nothing from another worker and simply carries the payroll. Measured
+// at chain depth 3: consumer-good firms held 789 workers to produce what ~240
+// could make, were input-limited 91% of firm-days, and cut wages to the floor
+// paying for idle labour.
+TEST_CASE("a firm rationed on inputs does not hire") {
+    Rng rng(1);
+    World w(10, 2, rng);
+
+    // Two goods: good 0 feeds good 1.
+    w.goods.assign(2, Good{});
+    for (auto& g : w.goods) { g.inputs.fill(NO_GOOD); g.input_qty.fill(0.0); g.labour_per_unit = 1.0; }
+    w.goods[1].consumer = true;
+    w.goods[1].inputs[0] = 0;
+    w.goods[1].input_qty[0] = 0.5;
+    goods::recompute(w.goods, w.params.commoditization_k);
+    w.markets.assign(w.goods.size(), market::GoodMarket{});
+
+    Firm& f = w.firms[0];
+    f.good = 1;
+    f.inventory = 0.0;              // starved of stock: would hire on its own
+    f.demand_last_month = 1000.0;
+    f.input_unsatisfied.fill(0.0);
+
+    // Not rationed: low inventory means hire.
+    firm_decisions::adjust_workforce(w, 0, rng);
+    CHECK(f.has_open_vacancy);
+
+    // Rationed on its input last month: another worker has nothing to work on.
+    f.input_unsatisfied[0] = 25.0;
+    firm_decisions::adjust_workforce(w, 0, rng);
+    CHECK_FALSE(f.has_open_vacancy);
 }

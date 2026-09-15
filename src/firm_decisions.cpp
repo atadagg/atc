@@ -90,7 +90,17 @@ void adjust_workforce(World& w, uint32_t firm, Rng& rng) {
     f.has_open_vacancy = false;
     f.pending_fire = NO_HOUSEHOLD;
 
-    if (f.inventory < band.lower) {
+    // A firm short of stock hires -- unless it was short of *materials* last
+    // month, in which case another worker has nothing to work on. Leontief
+    // production means idle labour, not more output. Read before
+    // rewire_suppliers clears it, exactly as adjust_wage reads
+    // vacancy_went_unfilled before this month's reset.
+    bool rationed_on_inputs = false;
+    for (double u : f.input_unsatisfied) {
+        if (u > 0.0) { rationed_on_inputs = true; break; }
+    }
+
+    if (f.inventory < band.lower && !rationed_on_inputs) {
         f.has_open_vacancy = true;
     } else if (f.inventory > band.upper && !f.employees.empty()) {
         uint32_t slot = rng.index(static_cast<uint32_t>(f.employees.size()));
