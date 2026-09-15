@@ -52,6 +52,7 @@ environment claims before repeating them.)
 | `world.{hpp,cpp}` | The agent arrays and the issuer accounts; `money_in_circulation()` (a measurement) and `books_balance()` (an assertion) |
 | `ledger.{hpp,cpp}` | `transfer` — the only code allowed to write a balance; `Journal`, `Entry`, `Reason`; `MonthFlows` + `SummaryJournal` |
 | `rng.{hpp,cpp}` | Deterministic seeded RNG, hand-rolled conversions |
+| `ownership.{hpp,cpp}` | The share register and payments along it. Shares are dealt at founding and never move — there is no trading yet |
 | `network.{hpp,cpp}` | Household↔firm links (employment, shop connections), and firm↔supplier links |
 | `goods.{hpp,cpp}` | The recipe graph. `Good`, `NO_GOOD`; `remove` and `commoditization` derived from the graph, never authored |
 | `market.{hpp,cpp}` | One published reference price per good — a measurement of what traded, not a clearing price |
@@ -176,8 +177,17 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
 - Firms **cut wages rather than go bankrupt** when payroll is unaffordable. The
   cut is bounded (`kMaxEmergencyWageCut`, `kMinWage`) — unbounded it reaches
   zero, and zero is absorbing, because every recovery channel is multiplicative.
-- **Profits go out proportional to household liquidity** — the wealthy receive
-  more. A deliberate stock-ownership proxy; it is the inequality engine.
+- **Profits go out per share**, along the register in `ownership.{hpp,cpp}`.
+  Shares are dealt once, unevenly, at founding, and never move: a household's
+  stake does not shrink when it buys groceries. That is the whole point. The
+  old rule weighted profits by household *liquidity*, which meant spending
+  money sold your stake, so whoever consumed least owned most — a loop that
+  compounded monthly with nothing opposing it and ended every chain run at
+  Gini 0.999. Inequality is still real and persistent (Gini ~0.15 in the
+  single-good world, ~0.9 at depth 2) but it is a level, not a runaway, because
+  holdings do not grow when you skip lunch. `Params::share_skew` is the dial on
+  how uneven the deal is; `public_firm_fraction` decides whether a firm is
+  closely held or held by dozens.
 - **Reservation wage never falls** when an employer cuts pay; the household
   searches harder. It falls 10% only while unemployed.
 - **Price is gated, not clamped**: raised only while below the cap, lowered only
@@ -217,10 +227,13 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
   because the distance that matters is the distance over which a producer's
   choices stop being visible to anyone. Counting from the consumer end also
   puts today's single good at 0, so the legacy economy needs no exception.
-- **Liquidation routes a dead firm's residual cash to the issuer.** That is a
-  NAMED PLACEHOLDER, not the intended economics: with no shareholders there is
-  nobody to receive it, and deleting it would break invariant 1. When ownership
-  exists, this is the line that changes.
+- **Entry and exit both run through the shareholders.** A dying firm's residual
+  cash goes to its holders — the residual claim, paid last, after the creditors
+  have taken what they were owed. A new firm's opening capital is paid *by* the
+  households it is dealt to, in proportion to their shares, and entry is atomic:
+  if they cannot cover it between them, no firm is founded and nothing has been
+  spent. No money is created to start a firm. The issuer remains only as the
+  fallback for a firm dying with an empty register, which cannot happen.
 - **A dying firm collects what it is owed before it pays what it owes.** Its
   receivables are pulled in first, then its creditors are paid out of the
   total. The other order writes off money that existed.
@@ -237,15 +250,23 @@ Loading a scenario is CLI-only — `Sim` takes its log at construction.
   mechanism is producing it.
 - **Discard the first timed run after a rebuild** — it reads ~30% slow cold.
   Interleave binaries when comparing.
-- `transfer` runs ~855M times in a 6000-month run, ~82% of it profit
-  distribution. Anything added to that path is a design decision, not a detail.
-  But that 82% is a share of *movements*, not of runtime — profile before
-  optimising on it.
+- `transfer` used to run ~855M times in a 6000-month run, ~82% of it profit
+  distribution, because every firm paid every household. Paying only actual
+  holders cut profit movements from 100,000 a month to 583 and total movements
+  by 5.4x; measured interleaved, a 1500-month run went 3.31s -> 2.71s. Shopping
+  is now the bulk of the movements. Anything added to that path is a design
+  decision, not a detail — but profile before optimising on it.
 
 ## Known deferred items
 
 Real, judged not worth fixing yet. Reconsider when touching that code.
 
+- **Chain worlds decay slowly over thousands of months.** Depth 2, seed 1, no
+  burn-in: unemployment sits at ~1% through month 1500 and has crept to 16% by
+  month 3000, with the mean wage sliding 2.5 -> 0.9 and firms holding almost no
+  cash. Not the old runaway (that was 93% unemployed by month 500) and not an
+  ownership bug — chain wages start low and grind down. Measure it before
+  building anything on top of a long chain run.
 - `network` has no bounds asserts on its index parameters.
 - `daily.cpp`'s cost clamp does not reduce `bought`, so at machine-epsilon scale
   a firm can ship marginally more than paid for. Conservation unaffected.

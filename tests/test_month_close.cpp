@@ -39,38 +39,46 @@ TEST_CASE("an unaffordable wage bill triggers a wage cut rather than bankruptcy"
     CHECK(w.books_balance() == doctest::Approx(before));
 }
 
-TEST_CASE("profits are distributed in proportion to household liquidity") {
+TEST_CASE("profits are distributed per share, not per unit of cash") {
     Rng rng(1);
     World w(2, 1, rng);
     w.firms[0].wage = 0.0;
     w.firms[0].liquidity = 300.0;
+    // The household holding a third of the firm is the RICHER of the two, so
+    // a liquidity-weighted rule and a per-share rule disagree in an obvious
+    // direction: under the old rule household 1 took 200 of the 300.
     w.households[0].liquidity = 100.0;
     w.households[1].liquidity = 200.0;
+    w.firms[0].holders.fill(NO_HOUSEHOLD);
+    w.firms[0].holder_shares.fill(0.0);
+    w.firms[0].holders[0] = 0;
+    w.firms[0].holder_shares[0] = 200.0 / 3.0;
+    w.firms[0].holders[1] = 1;
+    w.firms[0].holder_shares[1] = 100.0 / 3.0;
 
     double before = w.books_balance();
     month_close::distribute_profits(w);
 
-    // Buffer is chi * wage bill = 0, so all 300 is distributed 1:2.
-    CHECK(w.households[0].liquidity == doctest::Approx(200.0));
-    CHECK(w.households[1].liquidity == doctest::Approx(400.0));
+    // Buffer is chi * wage bill = 0, so all 300 is distributed 2:1.
+    CHECK(w.households[0].liquidity == doctest::Approx(300.0));
+    CHECK(w.households[1].liquidity == doctest::Approx(300.0));
     CHECK(w.firms[0].liquidity == doctest::Approx(0.0));
     CHECK(w.books_balance() == doctest::Approx(before));
 }
 
 TEST_CASE("profit distribution across multiple firms does not create money") {
     // Regression test for a previously-fixed bug: distribute_profits used to
-    // recompute each household's share against a liquidity total captured
-    // once before the whole loop, while the numerator (household liquidity)
-    // kept growing as earlier firms' profits were credited. From the second
-    // firm onward the per-household ratios summed to more than 1, so each
-    // subsequent firm distributed more than its own profit -- pure money
-    // creation. The current implementation snapshots every household's
-    // liquidity (and the total) once, before any firm distributes, and uses
-    // that fixed snapshot for every firm's split.
+    // weight each household's share by its liquidity, recomputed against a
+    // total captured once before the whole loop, while the numerator kept
+    // growing as earlier firms' profits were credited. From the second firm
+    // onward the ratios summed to more than 1 and each subsequent firm paid
+    // out more than its own profit -- pure money creation.
     //
-    // 3 firms, 3 households, distinct liquidities and distinct distributable
-    // profits so that a stale-total bug would visibly diverge from the
-    // correct fixed-proportion split by the third firm.
+    // Shares cannot reproduce that bug by construction, because they do not
+    // move when money does. The test stays because the property it guards --
+    // total distributed equals total profit, whatever the order -- is the one
+    // that matters, and it now also pins down that a household's payout is
+    // independent of how rich it is.
     Rng rng(1);
     World w(3, 3, rng);
 
@@ -78,9 +86,18 @@ TEST_CASE("profit distribution across multiple firms does not create money") {
     w.households[1].liquidity = 200.0;
     w.households[2].liquidity = 300.0;
 
-    // Zero wage => zero buffer => the firm's entire liquidity is its
-    // distributable profit, regardless of employee headcount.
-    for (auto& f : w.firms) f.wage = 0.0;
+    // Every firm is held 50/50 by households 0 and 1. Household 2 is the
+    // richest and owns nothing, so under the old rule it took half the pot
+    // and under this one it takes none.
+    for (auto& f : w.firms) {
+        f.wage = 0.0;  // zero buffer, so liquidity is all distributable
+        f.holders.fill(NO_HOUSEHOLD);
+        f.holder_shares.fill(0.0);
+        f.holders[0] = 0;
+        f.holder_shares[0] = 50.0;
+        f.holders[1] = 1;
+        f.holder_shares[1] = 50.0;
+    }
     w.firms[0].liquidity = 30.0;
     w.firms[1].liquidity = 60.0;
     w.firms[2].liquidity = 90.0;
@@ -90,15 +107,12 @@ TEST_CASE("profit distribution across multiple firms does not create money") {
 
     month_close::distribute_profits(w);
 
-    // Correct behaviour: every firm splits its profit in the SAME fixed
-    // proportions (100:200:300 of the initial 600 total), independent of
-    // distribution order. Total profit distributed is 30+60+90=180.
-    CHECK(w.households[0].liquidity == doctest::Approx(100.0 + 180.0 * (100.0 / 600.0)));
-    CHECK(w.households[1].liquidity == doctest::Approx(200.0 + 180.0 * (200.0 / 600.0)));
-    CHECK(w.households[2].liquidity == doctest::Approx(300.0 + 180.0 * (300.0 / 600.0)));
+    // Total profit distributed is 30+60+90=180, split evenly by shares.
+    CHECK(w.households[0].liquidity == doctest::Approx(100.0 + 90.0));
+    CHECK(w.households[1].liquidity == doctest::Approx(200.0 + 90.0));
+    CHECK(w.households[2].liquidity == doctest::Approx(300.0));
 
     for (const auto& f : w.firms) CHECK(f.liquidity == doctest::Approx(0.0));
-
     CHECK(w.books_balance() == doctest::Approx(before));
 }
 

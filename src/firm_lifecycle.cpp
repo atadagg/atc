@@ -8,6 +8,7 @@
 #include "balance_sheet.hpp"
 #include "goods.hpp"
 #include "ledger.hpp"
+#include "ownership.hpp"
 #include "market.hpp"
 #include "network.hpp"
 #include "params.hpp"
@@ -103,14 +104,20 @@ void liquidate(World& w, uint32_t firm, ledger::Journal* journal) {
     }
 
     if (f.liquidity > 0.0) {
-        // PLACEHOLDER until piece 2. A dying firm's residual cash should go to
-        // its shareholders, and shareholders do not exist yet. Routing it to
-        // the issuer keeps invariant 1 exact -- the money leaves circulation
-        // rather than vanishing -- and Task 12's founding draws from the same
-        // account, so entry and exit are symmetric. Piece 2 replaces both ends
-        // with real owners.
-        ledger::transfer(w, ledger::firm(firm), ledger::issuer(kIssuer), f.liquidity,
-                         ledger::Reason::FirmLiquidation, journal);
+        // What survives the creditors belongs to the shareholders. This is
+        // the residual claim, and it is why equity is the last thing paid:
+        // everything above has already taken what it was owed.
+        const double residual = f.liquidity;
+        const double paid = ownership::pay_holders(w, firm, residual,
+                                                   ledger::Reason::FirmLiquidation, journal);
+        if (paid < residual && f.liquidity > 0.0) {
+            // A firm with an empty register has nobody to pay. It cannot
+            // happen -- every firm is dealt one at founding -- but deleting
+            // the money would break invariant 1, so the cash goes back where
+            // founding capital used to come from rather than vanishing.
+            ledger::transfer(w, ledger::firm(firm), ledger::issuer(kIssuer), f.liquidity,
+                             ledger::Reason::FirmLiquidation, journal);
+        }
     }
 
     // Only what could NOT be collected is cancelled -- a debtor that was out
@@ -263,7 +270,27 @@ void run_entry(World& w, Rng& rng, ledger::Journal* journal) {
 
         if (!rng.chance(w.params.firm_entry_prob)) continue;
 
+        // Deal the register before the firm exists in the world, so that the
+        // founders are known before a single coin moves. Entry is atomic: if
+        // they cannot cover the capital between them, no firm is founded and
+        // nothing has been spent.
         Firm nf;
+        ownership::deal(nf, static_cast<uint32_t>(w.households.size()), w.params, rng);
+        double subscribed = 0.0;
+        for (std::size_t k = 0; k < nf.holders.size(); ++k) {
+            if (nf.holders[k] == NO_HOUSEHOLD) continue;
+            subscribed += std::min(w.params.firm_entry_capital *
+                                       (nf.holder_shares[k] / ownership::kSharesPerFirm),
+                                   w.households[nf.holders[k]].liquidity);
+        }
+        // Tolerance, not slack. When every founder can afford its share the
+        // sum is the capital by construction -- but it is a sum of
+        // separately rounded shares, so it lands a few ULPs under about as
+        // often as not. A strict test here rejects solvent founders on a
+        // 4e-14 crumb; measured, it did exactly that.
+        const double crumb = 1e-9 * std::max(1.0, w.params.firm_entry_capital);
+        if (subscribed < w.params.firm_entry_capital - crumb) continue;
+
         nf.alive = true;
         nf.good = g;
         nf.price = m.reference_price;
@@ -280,15 +307,35 @@ void run_entry(World& w, Rng& rng, ledger::Journal* journal) {
         const uint32_t index = static_cast<uint32_t>(w.firms.size());
         w.firms.push_back(nf);
 
-        // PLACEHOLDER until piece 2, symmetric with liquidate()'s residual
-        // cash going to the issuer above: a founder's opening capital should
-        // come from shareholders buying equity, and shareholders do not
-        // exist yet. Routing it through the issuer keeps invariant 1 exact --
-        // the money enters circulation through the same account liquidation
-        // returns it to -- and piece 2 replaces both ends with real owners.
-        ledger::transfer(w, ledger::issuer(kIssuer), ledger::firm(index),
-                         w.params.firm_entry_capital, ledger::Reason::FirmFounding,
-                         journal);
+        // The founders pay for it, in proportion to the shares they were just
+        // dealt. No money is created to start a firm: the capital is money
+        // that already existed, moving out of the wallets of the households
+        // that will receive its profits. The affordability check above ran on
+        // this same arithmetic, so no payment here can overdraw an account.
+        //
+        // The last founder takes the exact remainder, so the firm lands on
+        // precisely `firm_entry_capital` rather than on a sum of separately
+        // rounded subscriptions.
+        std::size_t last_founder = 0;
+        for (std::size_t k = 0; k < w.firms[index].holders.size(); ++k) {
+            if (w.firms[index].holders[k] != NO_HOUSEHOLD) last_founder = k;
+        }
+        double still_needed = w.params.firm_entry_capital;
+        for (std::size_t k = 0; k < w.firms[index].holders.size(); ++k) {
+            const uint32_t holder = w.firms[index].holders[k];
+            if (holder == NO_HOUSEHOLD) continue;
+            const double want =
+                (k == last_founder)
+                    ? still_needed
+                    : w.params.firm_entry_capital *
+                          (w.firms[index].holder_shares[k] / ownership::kSharesPerFirm);
+            const double pay = std::min(std::min(want, still_needed),
+                                        w.households[holder].liquidity);
+            if (pay <= 0.0) continue;
+            ledger::transfer(w, ledger::household(holder), ledger::firm(index), pay,
+                             ledger::Reason::FirmFounding, journal);
+            still_needed -= pay;
+        }
         ++founded_this_month;
     }
 }

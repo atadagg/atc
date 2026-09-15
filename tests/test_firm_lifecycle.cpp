@@ -4,6 +4,7 @@
 #include "balance_sheet.hpp"
 #include "firm_lifecycle.hpp"
 #include "network.hpp"
+#include "ownership.hpp"
 #include "world.hpp"
 
 TEST_CASE("an insolvent firm dies and releases its workers") {
@@ -242,8 +243,101 @@ TEST_CASE("entry does not exceed the per-month cap across goods") {
     w.params.firm_entry_max_per_good = 8.0;
     w.params.firm_entry_max_per_month = 2.0;
 
+    // Founders pay for the firms they found, and this world has only 30
+    // households. Make sure nobody runs out of cash, so the per-month cap is
+    // the only thing that can be binding.
+    for (Household& h : w.households) h.liquidity = 100000.0;
+
     std::size_t before = w.firms.size();
     firm_lifecycle::run_entry(w, rng);
 
     CHECK(w.firms.size() == before + 2);
+}
+
+TEST_CASE("a firm is not founded when its founders cannot pay for it") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    w.params.firm_entry_prob = 1.0;
+    w.params.firm_entry_max_per_good = 99.0;
+    w.params.firm_entry_max_per_month = 99.0;
+    w.params.firm_entry_capital = 100.0;
+    w.markets[0].reference_price = 100.0;
+    w.markets[0].has_reference = true;
+
+    // Nobody holds a coin, so however profitable the good looks there is no
+    // capital to open the doors with. Founding capital is money that already
+    // existed -- it is not created for the occasion.
+    for (Household& h : w.households) h.liquidity = 0.0;
+
+    const std::size_t before = w.firms.size();
+    const double books = w.books_balance();
+    for (int month = 0; month < 10; ++month) firm_lifecycle::run_entry(w, rng);
+
+    CHECK(w.firms.size() == before);
+    CHECK(w.books_balance() == doctest::Approx(books));
+}
+
+TEST_CASE("founders pay a new firm's capital out of their own pockets") {
+    Rng rng(4);
+    World w(30, 4, rng);
+    w.params.firm_entry_prob = 1.0;
+    w.params.firm_entry_max_per_good = 99.0;
+    w.params.firm_entry_max_per_month = 1.0;
+    w.params.firm_entry_capital = 100.0;
+    w.markets[0].reference_price = 100.0;
+    w.markets[0].has_reference = true;
+    for (Household& h : w.households) h.liquidity = 100000.0;
+
+    const std::size_t before = w.firms.size();
+    const double household_cash_before = [&] {
+        double t = 0.0;
+        for (const Household& h : w.households) t += h.liquidity;
+        return t;
+    }();
+    const double circulating = w.money_in_circulation();
+
+    firm_lifecycle::run_entry(w, rng);
+
+    REQUIRE(w.firms.size() == before + 1);
+    const Firm& founded = w.firms.back();
+    CHECK(founded.liquidity == doctest::Approx(100.0));
+    CHECK(ownership::total_shares(founded) == doctest::Approx(ownership::kSharesPerFirm));
+
+    double household_cash_after = 0.0;
+    for (const Household& h : w.households) household_cash_after += h.liquidity;
+    CHECK(household_cash_before - household_cash_after == doctest::Approx(100.0));
+
+    // No issuance: the capital moved within the economy rather than into it.
+    CHECK(w.money_in_circulation() == doctest::Approx(circulating));
+}
+
+TEST_CASE("a liquidated firm's residual cash goes to its shareholders") {
+    Rng rng(1);
+    World w(10, 2, rng);
+    Firm& f = w.firms[0];
+    f.holders.fill(NO_HOUSEHOLD);
+    f.holder_shares.fill(0.0);
+    f.holders[0] = 3;
+    f.holder_shares[0] = 75.0;
+    f.holders[1] = 8;
+    f.holder_shares[1] = 25.0;
+    f.liquidity = 400.0;
+    f.payables = 0.0;
+    f.receivables = 0.0;
+    f.payable_to.fill(NO_FIRM);
+    f.payable_amount.fill(0.0);
+
+    const double before_3 = w.households[3].liquidity;
+    const double before_8 = w.households[8].liquidity;
+    const double issuer_before = w.issuers[0];
+    const double books = w.books_balance();
+
+    firm_lifecycle::liquidate(w, 0);
+
+    CHECK(w.households[3].liquidity - before_3 == doctest::Approx(300.0));
+    CHECK(w.households[8].liquidity - before_8 == doctest::Approx(100.0));
+    // The issuer is no longer the residual claimant.
+    CHECK(w.issuers[0] == doctest::Approx(issuer_before));
+    CHECK(w.firms[0].liquidity == doctest::Approx(0.0));
+    CHECK(w.books_balance() == doctest::Approx(books));
 }

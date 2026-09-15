@@ -56,6 +56,11 @@ constexpr ParamSpec kSpecs[] = {
     spec<&Params::firm_entry_capital>("firm_entry_capital", 0.0, 100000.0),
     spec<&Params::firm_entry_max_per_good>("firm_entry_max_per_good", 0.0, 1000.0),
     spec<&Params::firm_entry_max_per_month>("firm_entry_max_per_month", 0.0, 1000.0),
+    // Ownership. Both are read when a firm is founded, so moving either
+    // mid-run changes how the *next* firms are dealt and leaves every
+    // existing register alone -- shares never move once dealt.
+    spec<&Params::public_firm_fraction>("public_firm_fraction", 0.0, kProb),
+    spec<&Params::share_skew>("share_skew", 0.0, 1.0),
 };
 
 }  // namespace

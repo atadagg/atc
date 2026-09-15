@@ -32,6 +32,20 @@ inline constexpr uint32_t kShopsPerHousehold = 7;
 inline constexpr uint32_t kMaxInputs = 3;
 inline constexpr uint32_t kSuppliersPerInput = 3;
 
+// Shareholder capacity. Structural for the same reason as the above: this
+// sizes the fixed arrays inside Firm that hold the register. A firm's shares
+// are dealt once, at founding, and never move, so the register can never
+// outgrow its slots.
+//
+// The two holder counts are the shape of the deal, not a rate: a private firm
+// is closely held, a public one is held by dozens. They are read at founding,
+// which does happen mid-run -- but they choose an array length, and a length
+// is not something a slider may move. `Params::share_skew` is the part of the
+// deal a slider does move.
+inline constexpr uint32_t kMaxHolders = 32;
+inline constexpr uint32_t kMinPublicHolders = 8;
+inline constexpr uint32_t kMaxPrivateHolders = 2;
+
 // =====================================================================
 // INITIAL CONDITIONS — compile-time, and structural in the same sense.
 //
@@ -134,4 +148,16 @@ struct Params {
     // Ceiling on how many firms may be founded across ALL goods in one
     // month, so one price shock cannot spawn a whole new sector at once.
     double firm_entry_max_per_month = 5.0;
+
+    // --- Ownership (not in Table 1) ---
+    // How likely a firm is dealt as a public company -- held by dozens --
+    // rather than closely held by one or two households. Read at founding,
+    // which happens mid-run, so it is behavioural.
+    double public_firm_fraction = 0.3;
+    // How steeply a firm's shares are skewed across its holders. Holder k of
+    // n receives weight `share_skew^k`, normalised, so 1.0 is an equal split
+    // and smaller is more concentrated. This is the dial on how unequal the
+    // starting deal is -- and, because holdings never move, on how unequal
+    // ownership stays.
+    double share_skew = 0.6;
 };

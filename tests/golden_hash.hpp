@@ -42,6 +42,11 @@ inline uint64_t run_hash(const World& w) {
         mix_u32(h, f.vacancy_went_unfilled ? 1u : 0u);
         mix_u32(h, f.months_fully_staffed);
         mix_u32(h, f.pending_fire);
+        // Ownership is run state like any other: a register that drifts is a
+        // changed run, and the gate should say so.
+        mix_u32(h, f.public_company ? 1u : 0u);
+        for (uint32_t holder : f.holders) mix_u32(h, holder);
+        for (double sh : f.holder_shares) mix(h, sh);
     }
     for (const Household& hh : w.households) {
         mix(h, hh.liquidity);

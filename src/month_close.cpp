@@ -9,6 +9,7 @@
 #include "firm_lifecycle.hpp"
 #include "ledger.hpp"
 #include "network.hpp"
+#include "ownership.hpp"
 #include "rng.hpp"
 #include "params.hpp"
 #include "world.hpp"
@@ -169,16 +170,15 @@ void pay_wages(World& w, ledger::Journal* journal) {
 }
 
 void distribute_profits(World& w, ledger::Journal* journal) {
-    // Ownership proxy: profit shares are proportional to household liquidity,
-    // so the wealthy receive more. This is the model's inequality engine.
-    // Capture liquidity before any distributions to avoid over-distribution.
-    std::vector<double> initial_liquidity(w.households.size());
-    double total_household_liquidity = 0.0;
-    for (size_t i = 0; i < w.households.size(); ++i) {
-        initial_liquidity[i] = w.households[i].liquidity;
-        total_household_liquidity += initial_liquidity[i];
-    }
-
+    // Profits flow along the share register: per share, not per unit of
+    // household cash. The old rule weighted by liquidity, which made spending
+    // money sell your stake -- see ownership.hpp for why that compounded.
+    //
+    // No liquidity snapshot is needed any more. The old rule had to capture
+    // every household's balance before the first payment, because each
+    // payment changed the weights of every later one. Shares do not move, so
+    // the weights are already fixed and the firms are independent of each
+    // other.
     for (uint32_t fi = 0; fi < w.firms.size(); ++fi) {
         Firm& f = w.firms[fi];
         if (!f.alive) continue;
@@ -188,35 +188,7 @@ void distribute_profits(World& w, ledger::Journal* journal) {
         double profit = f.liquidity - retain;
         if (profit <= 0.0) continue;
 
-        // As in pay_wages: the last recipient takes the exact remainder, so
-        // the firm is left holding precisely its buffer. An empty firm has a
-        // zero wage bill, hence a zero buffer, hence pays out everything --
-        // which is the case where separately computed shares are most likely
-        // to overshoot the pot (measured: 11,115 times per reference run).
-        //
-        // The 999 proportional shares can also overshoot in the *other*
-        // direction, leaving the firm a hair below its buffer and this
-        // remainder negative. A household whose entitlement is exactly zero
-        // (no liquidity of its own) is maximally exposed to that, because it
-        // has no share of its own to absorb the accumulated error. Seeds 5 and
-        // 7 aborted this way before `capped_payment` was added.
-        const double even_share = profit / static_cast<double>(w.households.size());
-        for (uint32_t i = 0; i < w.households.size(); ++i) {
-            const bool last = (i + 1 == w.households.size());
-            double want;
-            if (last) {
-                want = f.liquidity - retain;
-            } else if (total_household_liquidity <= 0.0) {
-                // Degenerate case: split evenly rather than destroying money.
-                want = even_share;
-            } else {
-                want = profit * (initial_liquidity[i] / total_household_liquidity);
-            }
-            ledger::transfer(w, ledger::firm(fi), ledger::household(i),
-                             capped_payment(want, f.liquidity - retain),
-                             ledger::Reason::Profit, journal);
-        }
-        check_landed_on_target(f.liquidity, retain, "distribute_profits");
+        ownership::pay_holders(w, fi, profit, ledger::Reason::Profit, journal);
     }
 }
 
