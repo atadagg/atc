@@ -67,6 +67,24 @@ struct Firm {
     double payables = 0.0;
     double receivables = 0.0;
 
+    // --- Ownership register ---
+    // Who holds this firm's shares, and how many each holds. Parallel arrays,
+    // NO_HOUSEHOLD marking an empty slot. Shares are dealt once, at founding,
+    // and never move: there is no share trading yet, which is the whole point
+    // -- a household's stake does not shrink when it buys groceries.
+    //
+    // The register lives on the Firm rather than the Household because every
+    // reader iterates firms and pays their holders: profit distribution,
+    // liquidation and founding all ask "who owns this firm", never "what does
+    // this household own". The reverse lookup is a scan, and nothing on the
+    // hot path needs it.
+    //
+    // Total shares outstanding is NOT stored -- it is a sum over the slots,
+    // the same discipline balance_sheet.hpp applies to equity.
+    bool public_company = false;
+    std::array<uint32_t, params::kMaxHolders> holders{};
+    std::array<double, params::kMaxHolders> holder_shares{};
+
     // Inventory is carried at cost, so equity does not move when a firm
     // merely re-prices its shelf. One moving-average cost per firm: a firm
     // makes one good, so one number is enough.

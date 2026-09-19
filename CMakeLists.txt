@@ -21,6 +21,7 @@ add_library(atc_core
     src/intervention.cpp
     src/scenario.cpp
     src/network.cpp
+    src/ownership.cpp
     src/firm_decisions.cpp
     src/household_decisions.cpp
     src/daily.cpp
@@ -62,6 +63,7 @@ add_executable(atc_tests
     tests/test_intervention.cpp
     tests/test_scenario.cpp
     tests/test_network.cpp
+    tests/test_ownership.cpp
     tests/test_firm_decisions.cpp
     tests/test_household_decisions.cpp
     tests/test_daily.cpp

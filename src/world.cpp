@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "ownership.hpp"
+
 World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     if (n_households == 0) {
         throw std::invalid_argument("World: n_households must be > 0");
@@ -38,6 +40,15 @@ World::World(uint32_t n_households, uint32_t n_firms, Rng& rng) {
     for (Firm& f : firms) {
         f.suppliers.fill(NO_FIRM);
         f.payable_to.fill(NO_FIRM);
+    }
+
+    // Deal the shares before anything else touches the households. Ownership
+    // is unequal from the first month and stays that way, because holdings do
+    // not move: that is the point of the experiment. Households still start
+    // with equal cash and equal jobs -- the inequality that emerges from here
+    // is an inequality of *income*, not a head start in the wallet.
+    for (Firm& f : firms) {
+        ownership::deal(f, n_households, params, rng);
     }
 
     for (uint32_t h = 0; h < n_households; ++h) {
